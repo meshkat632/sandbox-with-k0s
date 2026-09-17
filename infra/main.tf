@@ -1,17 +1,16 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
+provider "aws" {
+  region = var.region
+
+  default_tags {
+    tags = {
+      Project     = "k0stool"
+      Environment = var.environment
+      ManagedBy   = "terraform"
     }
   }
 }
 
-provider "aws" {
-  region  = "eu-central-1"
-}
-
 resource "aws_key_pair" "k0stool" {
   key_name   = var.key_name
-  public_key = var.public_key
+  public_key = trimspace(var.public_key)
 }
