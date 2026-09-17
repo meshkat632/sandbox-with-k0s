@@ -13,5 +13,5 @@ provider "aws" {
 
 resource "aws_key_pair" "k0stool" {
   key_name   = var.key_name
-  public_key = file(pathexpand(var.public_key_path))
+  public_key = var.public_key
 }
