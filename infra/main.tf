@@ -22,7 +22,7 @@ output "tokens_debug" {
 }
 
 resource "aws_secretsmanager_secret" "tokens" {
-  name = "sandbox/tokens-test"
+  name = "sandbox/tokens-test-v1"
 }
 
 resource "aws_secretsmanager_secret_version" "tokens" {
