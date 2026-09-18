@@ -19,14 +19,42 @@ variable "key_name" {
   }
 }
 
-variable "public_key" {
-  description = "OpenSSH public key content (the single line starting with ssh-ed25519). NEVER pass a private key here."
+variable "vpc_cidr" {
+  description = "CIDR block for the VPC."
   type        = string
-  sensitive   = true
+  default     = "10.0.0.0/16"
 
   validation {
-    condition     = can(regex("^ssh-(ed25519|rsa) ", trimspace(var.public_key)))
-    error_message = "Public key must be an OpenSSH public key starting with 'ssh-ed25519 ' or 'ssh-rsa '."
+    condition     = can(cidrhost(var.vpc_cidr, 0))
+    error_message = "vpc_cidr must be a valid IPv4 CIDR block."
+  }
+}
+
+variable "public_subnet_cidr" {
+  description = "CIDR block for the public subnet. Must fall inside vpc_cidr."
+  type        = string
+  default     = "10.0.1.0/24"
+
+  validation {
+    condition     = can(cidrhost(var.public_subnet_cidr, 0))
+    error_message = "public_subnet_cidr must be a valid IPv4 CIDR block."
+  }
+}
+
+variable "instance_type" {
+  description = "EC2 instance type for the dev box."
+  type        = string
+  default     = "t3.micro"
+}
+
+variable "ssh_cidr" {
+  description = "CIDR block allowed to reach the instance on port 22. '0.0.0.0/0' means SSH from anywhere."
+  type        = string
+  default     = "0.0.0.0/0"
+
+  validation {
+    condition     = can(cidrhost(var.ssh_cidr, 0))
+    error_message = "ssh_cidr must be a valid IPv4 CIDR block."
   }
 }
 

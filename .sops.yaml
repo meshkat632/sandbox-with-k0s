@@ -1,0 +1,6 @@
+creation_rules:
+  # Encrypt any file with a name ending in sops.secrets.yaml, anywhere in the repo.
+  - path_regex: .*.secrets\.yaml$
+    age: >-
+      age1hzmfv9re2cgdgts9d8ww4zhlxzgudud3t00ev8aftd6w7zndyp4srhjyqp,
+      age1e8r8s0j29ujrwtu62swg8tttw9rrrnnlgg6svdkn3gfxffh7zemq3nj9ye
