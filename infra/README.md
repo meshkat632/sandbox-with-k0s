@@ -68,7 +68,7 @@ Useful knobs (vars or `-var` flags):
 |---|---|---|
 | `environment` | `dev` | name prefix: `k0stool-<env>-…` |
 | `instance_type` | `t3a.large` | minimum for multi-node k0s |
-| `instance_count` | `3` | 1 controller + 2 workers, spread across AZs |
+| `instance_count` | `1` | start at 1, raise it later and join the new nodes — see "Scaling" below |
 | `ssh_cidr` | `0.0.0.0/0` | tighten to your IP once SSM is verified |
 | `public_key_path` | `~/.k0stool/k0stool-key.pub` | source of the `aws_key_pair` |
 | `kube_api_cidrs` | `[]` | CIDRs allowed to reach the k8s API (6443) from outside the VPC; empty = closed, use SSM tunnel instead |
@@ -78,8 +78,47 @@ Changing `instance_type` or the launch template replaces running nodes
 
 Bumping the launch template's `user_data` (e.g. editing `node-bootstrap`'s
 `packages`) does **not** replace already-running nodes — it only takes effect
-on the next boot. To force the 3 existing nodes to pick it up, taint and
-reapply them, or run the same install command over SSM (see below).
+on the next boot. To force existing nodes to pick it up, taint and reapply
+them, or run the same install command over SSM (see below).
+
+## Scaling
+
+Start with a single node and grow the cluster as needed, without touching
+already-running nodes:
+
+1. **Bootstrap node 1 as a controller that also runs pods**, so a single
+   node is a fully working cluster on its own. SSH or SSM in (see
+   "Connect to the nodes" below), copy `scripts/install_k0s.py` over, then:
+   ```bash
+   sudo python3 install_k0s.py --role controller --enable-worker
+   ```
+   Do **not** use `k0s install controller --single` — that mode can never
+   join other nodes later, even with `--enable-worker`.
+
+2. **When you need more capacity, raise `instance_count` and apply.**
+   `aws_instance` is count-indexed, so this only ever appends new
+   instances at the next index — existing nodes (and their `k0s`
+   installs) are untouched:
+   ```bash
+   terraform apply -var 'instance_count=3'   # or edit terraform.tfvars
+   ```
+   (Lowering `instance_count` destroys the *highest*-indexed instances —
+   don't lower it below the number of nodes you've actually bootstrapped.)
+
+3. **Join the new instances as workers:**
+   ```bash
+   terraform output -json k0s_node_ids | jq -r '.[]'   # find the new ids
+   scripts/join_workers.sh <new-instance-id> [<new-instance-id> ...]
+   ```
+   This generates a fresh join token on the controller and installs/starts
+   `k0s` as a worker on each instance you pass, over SSM — the same flow
+   used to bootstrap the original workers, just automated. Verify with
+   `kubectl get nodes`.
+
+Whether the controller should also run pods (`--enable-worker`) once you
+have dedicated workers is a judgment call — mixing control-plane and
+workload traffic is fine for a sandbox cluster like this one, less so
+once you care about isolating the control plane.
 
 ## Connect to the nodes
 

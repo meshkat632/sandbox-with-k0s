@@ -81,9 +81,9 @@ variable "environment" {
 }
 
 variable "instance_count" {
-  description = "Number of k0s node instances to launch. Multi-node cluster: 1 controller + N workers (3 = 1+2)."
+  description = "Number of k0s node instances to launch. Start at 1 (bootstrap it as a controller with --enable-worker for a fully working single-node cluster), then raise this and join the new instances as workers — see scripts/join_workers.sh. Raising it never touches existing instances (aws_instance is count-indexed: new nodes just get appended at the next index); lowering it destroys the highest-indexed ones, so don't lower it below the number of nodes you've actually bootstrapped."
   type        = number
-  default     = 3
+  default     = 1
 
   validation {
     condition     = var.instance_count >= 1
