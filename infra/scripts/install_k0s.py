@@ -2,9 +2,11 @@
 """Bootstrap a k0s node for a multi-node cluster.
 
 First node (controller) — do NOT use `k0s install controller --single`,
-single-node mode can never join other nodes:
+single-node mode can never join other nodes. Controllers are control-plane
+only (don't show up in `kubectl get nodes`) unless you pass --enable-worker,
+which also schedules pods on them:
 
-    sudo python3 install_k0s.py --role controller
+    sudo python3 install_k0s.py --role controller [--enable-worker]
 
 Then create a worker join token ON THE CONTROLLER:
 
@@ -63,8 +65,11 @@ def wait_until_running(deadline_s=180):
     sys.exit(f"k0s did not start within {deadline_s}s — check `journalctl -u k0scontroller` / `-u k0sworker`")
 
 
-def install_controller():
-    run([K0S_BIN, "install", "controller"])
+def install_controller(enable_worker):
+    cmd = [K0S_BIN, "install", "controller"]
+    if enable_worker:
+        cmd.append("--enable-worker")
+    run(cmd)
 
 
 def install_worker(controller_ip, token):
@@ -86,12 +91,17 @@ def main():
     parser.add_argument("--role", choices=["controller", "worker"], required=True)
     parser.add_argument("--token", help="worker join token from `k0s token create --role worker`")
     parser.add_argument("--controller-ip", help="controller private IP, for a pre-join connectivity check")
+    parser.add_argument(
+        "--enable-worker",
+        action="store_true",
+        help="controller only: also schedule pods on this node (mixes control-plane and workload traffic)",
+    )
     args = parser.parse_args()
 
     install_binary()
 
     if args.role == "controller":
-        install_controller()
+        install_controller(args.enable_worker)
     else:
         if not args.token:
             parser.error("--role worker requires --token")
