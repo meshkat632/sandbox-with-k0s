@@ -18,7 +18,7 @@ resource "aws_key_pair" "this" {
 module "tokens_secret" {
   source      = "./tf-modules/secrets-from-sops"
   source_file = "${path.root}/secrets/tokens.secrets.yaml"
-  secret_name = "sandbox/tokens-test-v5"
+  secret_name = var.tokens_secret_name
 
   expose_debug_output = true # flip to false once verified
 

@@ -102,3 +102,9 @@ variable "public_key" {
   type        = string
   default     = null
 }
+
+variable "tokens_secret_name" {
+  description = "AWS Secrets Manager secret name for the sops-decrypted tokens. Give separate Terraform states (e.g. a Terraform Cloud workspace vs. local) distinct values here — Secrets Manager names must be unique per account/region, so two states both defaulting to the same name will collide."
+  type        = string
+  default     = "sandbox/tokens-test-v5"
+}
