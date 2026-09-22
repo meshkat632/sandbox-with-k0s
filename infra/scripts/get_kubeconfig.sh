@@ -81,9 +81,12 @@ fi
 
 mkdir -p "$(dirname "$OUTPUT_PATH")"
 umask 077
-printf '%s\n' "$KUBECONFIG_CONTENT" | sed "s#https://localhost:6443#https://${PUBLIC_IP}:6443#" > "$OUTPUT_PATH"
+# k0s embeds the node's own address (its private IP, or "localhost" on
+# some builds) as the API server host — replace whatever that is with
+# the public IP so the file works from outside the VPC.
+printf '%s\n' "$KUBECONFIG_CONTENT" | sed -E "s#https://[^:]+:6443#https://${PUBLIC_IP}:6443#" > "$OUTPUT_PATH"
 
-echo "kubeconfig written to $OUTPUT_PATH (server: https://${PUBLIC_IP}:6443)" >&2
+echo "kubeconfig written to $OUTPUT_PATH (server: $(grep -oE 'https://[^ ]+:6443' "$OUTPUT_PATH" | head -1))" >&2
 echo "" >&2
 echo "  export KUBECONFIG=$OUTPUT_PATH" >&2
 echo "" >&2
