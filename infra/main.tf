@@ -47,6 +47,10 @@ module "ssm_profile" {
   ]
 }
 
+module "node_bootstrap" {
+  source = "./tf-modules/node-bootstrap"
+}
+
 module "launch_template" {
   source = "./tf-modules/launch-template"
 
@@ -55,6 +59,7 @@ module "launch_template" {
   key_name                  = aws_key_pair.this.key_name
   security_group_ids        = [module.network.security_group_id]
   iam_instance_profile_name = module.ssm_profile.instance_profile_name
+  user_data                 = module.node_bootstrap.user_data
 }
 
 module "k0s_nodes" {

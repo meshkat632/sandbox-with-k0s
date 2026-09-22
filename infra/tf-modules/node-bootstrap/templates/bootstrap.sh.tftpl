@@ -1,0 +1,10 @@
+#!/bin/bash
+set -euxo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update
+
+%{ if length(packages) > 0 ~}
+apt-get install -y ${join(" ", packages)}
+%{ endif ~}

@@ -36,6 +36,7 @@ and secrets delivered via sops-encrypted files committed to git.
 |---|---|---|---|
 | `tf-modules/network` | VPC, internet gateway, one public subnet per AZ (round-robin CIDR→AZ), shared public route table, SSH security group | `name`, `vpc_cidr`, `public_subnet_cidrs`, `ssh_cidr` | `vpc_id`, `public_subnet_ids`, `security_group_id`, route table / IGW ids |
 | `tf-modules/launch-template` | `aws_launch_template` with latest Ubuntu 24.04 AMI (or pinned `ami_id`), optional user_data, instance/volume tag specs | `name`, `instance_type`, `key_name`, `security_group_ids`, `iam_instance_profile_name`, `user_data` | `id`, `latest_version`, `ami_id` |
+| `tf-modules/node-bootstrap` | Renders the launch template's `user_data`: `apt-get update` then `apt-get install` a fixed package list, run by cloud-init on first boot of every node | `packages` (default: curl, unzip, jq, git, open-iscsi) | `user_data` |
 | `tf-modules/instances` | Launches N instances from the template, spread across subnets; `Name = <name>-<n>` | `launch_template_id`, `subnet_ids`, `instance_count` | `instance_ids`, `public_ips`, `public_dns`, `private_ips` |
 | `tf-modules/ssm-instance-profile` | IAM role + instance profile for nodes: SSM core built in, extra managed policies attachable live | `name`, `extra_policy_arns` | `instance_profile_name`, `role_arn` |
 | `tf-modules/secrets-from-sops` | Decrypts a sops-encrypted file and stores it in AWS Secrets Manager | `source_file`, `secret_name`, `recovery_window_in_days` | `secret_arn`, `secret_id` |
@@ -73,6 +74,11 @@ Useful knobs (vars or `-var` flags):
 
 Changing `instance_type` or the launch template replaces running nodes
 (new IPs, wiped disks).
+
+Bumping the launch template's `user_data` (e.g. editing `node-bootstrap`'s
+`packages`) does **not** replace already-running nodes — it only takes effect
+on the next boot. To force the 3 existing nodes to pick it up, taint and
+reapply them, or run the same install command over SSM (see below).
 
 ## Connect to the nodes
 
@@ -123,6 +129,27 @@ aws ssm send-command \
   --document-name AWS-RunShellScript \
   --parameters '{"commands":["curl -sSfL https://get.k0s.sh | sudo sh"]}'
 ```
+
+### Kubeconfig
+
+Once a controller has been bootstrapped (`scripts/install_k0s.py --role controller`),
+pull its admin kubeconfig over SSM with:
+
+```bash
+scripts/get_kubeconfig.sh
+```
+
+By default it targets the first node in `k0s_node_ids` and writes to
+`~/.kube/config-k0stool`, rewriting the API server address from
+`localhost` to the controller's public IP. Override with `-i <instance-id>`
+(if that first node isn't the controller) and `-o <path>`. It prints the
+`export KUBECONFIG=...` line to run afterward.
+
+Port 6443 is only open to the VPC CIDR by default (`ssh_cidr`/security group),
+not the internet — either widen the security group to your IP, or reach it
+through an SSM port-forward session (`aws ssm start-session --target <id>
+--document-name AWS-StartPortForwardingSession --parameters '{"portNumber":["6443"],"localPortNumber":["6443"]}'`
+and point kubeconfig at `https://localhost:6443`).
 
 ## Secrets (gitops)
 

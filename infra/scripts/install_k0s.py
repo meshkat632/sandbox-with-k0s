@@ -71,6 +71,7 @@ def install_worker(controller_ip, token):
     if controller_ip:
         check_reachable(controller_ip, 6443)
     token_file = "/etc/k0s/join-token"
+    os.makedirs(os.path.dirname(token_file), exist_ok=True)
     with open(token_file, "w") as f:
         f.write(token)
     os.chmod(token_file, 0o600)
