@@ -104,7 +104,13 @@ variable "public_key" {
 }
 
 variable "tokens_secret_name" {
-  description = "AWS Secrets Manager secret name for the sops-decrypted tokens. Give separate Terraform states (e.g. a Terraform Cloud workspace vs. local) distinct values here — Secrets Manager names must be unique per account/region, so two states both defaulting to the same name will collide."
+  description = "Base AWS Secrets Manager secret name for the sops-decrypted tokens, before name_suffix is appended."
   type        = string
   default     = "sandbox/tokens-test-v5"
+}
+
+variable "name_suffix" {
+  description = "Explicit suffix appended to every account/region-unique resource name (IAM role, instance profile, launch template, key pair, secret) so this module can run more than once against the same AWS account without name collisions. Leave unset (null, the default) to auto-generate a random one — safe for a brand-new state/workspace. Pin it to a fixed value (including \"\" to reproduce pre-suffix names) for a state that already has real resources, since changing this value renames — and therefore replaces — all of them."
+  type        = string
+  default     = null
 }
