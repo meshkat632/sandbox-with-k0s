@@ -30,21 +30,21 @@ variable "vpc_cidr" {
   }
 }
 
-variable "public_subnet_cidr" {
-  description = "CIDR block for the public subnet. Must fall inside vpc_cidr."
-  type        = string
-  default     = "10.0.1.0/24"
+variable "public_subnet_cidrs" {
+  description = "CIDR blocks for the public subnets, one per availability zone in order. Must fall inside vpc_cidr."
+  type        = list(string)
+  default     = ["10.0.1.0/24", "10.0.2.0/24"]
 
   validation {
-    condition     = can(cidrhost(var.public_subnet_cidr, 0))
-    error_message = "public_subnet_cidr must be a valid IPv4 CIDR block."
+    condition     = alltrue([for c in var.public_subnet_cidrs : can(cidrhost(c, 0))])
+    error_message = "public_subnet_cidrs must be a list of valid IPv4 CIDR blocks."
   }
 }
 
 variable "instance_type" {
-  description = "EC2 instance type for the dev box."
+  description = "EC2 instance type for the k0s nodes. t3a.large (8 GB) is the minimum for a multi-node k0s cluster."
   type        = string
-  default     = "t3.micro"
+  default     = "t3a.large"
 }
 
 variable "ssh_cidr" {
@@ -67,4 +67,21 @@ variable "environment" {
     condition     = contains(["dev", "staging", "prod"], var.environment)
     error_message = "Environment must be one of: dev, staging, prod."
   }
+}
+
+variable "instance_count" {
+  description = "Number of k0s node instances to launch. Multi-node cluster: 1 controller + N workers (3 = 1+2)."
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.instance_count >= 1
+    error_message = "instance_count must be 1 or greater."
+  }
+}
+
+variable "public_key_path" {
+  description = "Path to an OpenSSH public key file used to create the EC2 key pair. Not used by Terraform Cloud — set to a key pair you import there instead."
+  type        = string
+  default     = "~/.k0stool/k0stool-key.pub"
 }

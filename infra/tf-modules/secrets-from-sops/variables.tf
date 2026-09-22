@@ -19,3 +19,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "recovery_window_in_days" {
+  type        = number
+  default     = 0
+  description = "Days before permanent deletion. Set to 0 to delete immediately (no recovery window) — useful for sandbox/test secrets."
+}
