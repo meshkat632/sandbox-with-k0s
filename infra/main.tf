@@ -21,10 +21,11 @@ locals {
   # Otherwise fall back to a random one, generated once and then stable
   # for the lifetime of this state — making a brand-new state/workspace
   # collision-free against any other, with no manual coordination.
-  computed_suffix = var.name_suffix != null ? var.name_suffix : random_id.suffix[0].hex
-  name_prefix     = local.computed_suffix == "" ? "k0stool-${var.environment}" : "k0stool-${var.environment}-${local.computed_suffix}"
-  key_name        = local.computed_suffix == "" ? var.key_name : "${var.key_name}-${local.computed_suffix}"
-  secret_name     = local.computed_suffix == "" ? var.tokens_secret_name : "${var.tokens_secret_name}-${local.computed_suffix}"
+  computed_suffix        = var.name_suffix != null ? var.name_suffix : random_id.suffix[0].hex
+  name_prefix            = local.computed_suffix == "" ? "k0stool-${var.environment}" : "k0stool-${var.environment}-${local.computed_suffix}"
+  key_name               = local.computed_suffix == "" ? var.key_name : "${var.key_name}-${local.computed_suffix}"
+  secret_name            = local.computed_suffix == "" ? var.tokens_secret_name : "${var.tokens_secret_name}-${local.computed_suffix}"
+  kubeconfig_secret_name = local.computed_suffix == "" ? var.kubeconfig_secret_name : "${var.kubeconfig_secret_name}-${local.computed_suffix}"
 }
 
 resource "aws_key_pair" "this" {
@@ -58,6 +59,16 @@ module "api_server_access" {
 
   security_group_id = module.network.security_group_id
   cidr_blocks       = var.kube_api_cidrs
+}
+
+module "kubeconfig_secret" {
+  source = "./tf-modules/kubeconfig-secret"
+
+  secret_name = local.kubeconfig_secret_name
+
+  tags = {
+    Environment = "sandbox"
+  }
 }
 
 module "ssm_profile" {
@@ -97,6 +108,14 @@ module "k0s_nodes" {
 
 output "tokens_secret_arn" {
   value = module.tokens_secret.secret_arn
+}
+
+output "kubeconfig_secret_arn" {
+  value = module.kubeconfig_secret.secret_arn
+}
+
+output "kubeconfig_secret_name" {
+  value = module.kubeconfig_secret.secret_name
 }
 
 data "sops_file" "ssh_keys" {

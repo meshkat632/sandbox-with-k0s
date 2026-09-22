@@ -109,6 +109,12 @@ variable "tokens_secret_name" {
   default     = "sandbox/tokens-test-v5"
 }
 
+variable "kubeconfig_secret_name" {
+  description = "Base AWS Secrets Manager secret name for the cluster's admin kubeconfig, before name_suffix is appended. Terraform only creates the (initially empty) secret — scripts/get_kubeconfig.sh populates it after the controller is bootstrapped."
+  type        = string
+  default     = "sandbox/k0stool-kubeconfig"
+}
+
 variable "name_suffix" {
   description = "Explicit suffix appended to every account/region-unique resource name (IAM role, instance profile, launch template, key pair, secret) so this module can run more than once against the same AWS account without name collisions. Leave unset (null, the default) to auto-generate a random one — safe for a brand-new state/workspace. Pin it to a fixed value (including \"\" to reproduce pre-suffix names) for a state that already has real resources, since changing this value renames — and therefore replaces — all of them."
   type        = string

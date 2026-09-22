@@ -40,6 +40,8 @@ and secrets delivered via sops-encrypted files committed to git.
 | `tf-modules/instances` | Launches N instances from the template, spread across subnets; `Name = <name>-<n>` | `launch_template_id`, `subnet_ids`, `instance_count` | `instance_ids`, `public_ips`, `public_dns`, `private_ips` |
 | `tf-modules/ssm-instance-profile` | IAM role + instance profile for nodes: SSM core built in, extra managed policies attachable live | `name`, `extra_policy_arns` | `instance_profile_name`, `role_arn` |
 | `tf-modules/secrets-from-sops` | Decrypts a sops-encrypted file and stores it in AWS Secrets Manager | `source_file`, `secret_name`, `recovery_window_in_days` | `secret_arn`, `secret_id` |
+| `tf-modules/api-server-access` | Adds one `aws_vpc_security_group_ingress_rule` per CIDR for the k8s API port against an existing security group, so it can run alongside a security group's own inline-managed rules without conflict | `security_group_id`, `cidr_blocks`, `port` (default `6443`) | `rule_ids` |
+| `tf-modules/kubeconfig-secret` | Creates an (initially placeholder) Secrets Manager secret to hold the admin kubeconfig; `scripts/get_kubeconfig.sh` populates the real content after the controller is bootstrapped | `secret_name`, `recovery_window_in_days` | `secret_arn`, `secret_name` |
 
 Composition lives in [main.tf](main.tf); root variables in [variables.tf](variables.tf);
 root outputs (instance IPs, subnet ids, etc.) in [outputs.tf](outputs.tf).
@@ -185,11 +187,23 @@ pull its admin kubeconfig over SSM with:
 scripts/get_kubeconfig.sh
 ```
 
-By default it targets the first node in `k0s_node_ids` and writes to
-`~/.kube/config-k0stool`, rewriting the API server address from k0s's
-internal address to the controller's public IP. Override with
-`-i <instance-id>` (if that first node isn't the controller) and
-`-o <path>`. It prints the `export KUBECONFIG=...` line to run afterward.
+By default it looks up a running instance tagged `k0s-role=controller`
+(override with `-t TAG_KEY=VALUE`, or skip lookup entirely with
+`-i <instance-id>`) — note nothing in this Terraform config sets that tag
+yet, so tag the controller instance yourself, or pass `-i` explicitly. It
+writes to `~/.kube/config-k0stool` (`-o <path>` to change), rewriting the
+API server address from k0s's internal address to the controller's public
+IP, and prints the `export KUBECONFIG=...` line to run afterward.
+
+By default it also pushes the fetched kubeconfig to the
+`kubeconfig_secret_name` Secrets Manager secret (pass `-S` to skip), so
+anyone with `secretsmanager:GetSecretValue` on it can fetch the same
+kubeconfig without SSM access of their own:
+```bash
+aws secretsmanager get-secret-value \
+  --secret-id "$(terraform output -raw kubeconfig_secret_name)" \
+  --query SecretString --output text > ~/.kube/config-k0stool
+```
 
 Reaching the API server from outside the VPC needs two things:
 
