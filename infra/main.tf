@@ -92,3 +92,27 @@ module "k0s_nodes" {
 output "tokens_secret_arn" {
   value = module.tokens_secret.secret_arn
 }
+
+data "sops_file" "ssh_keys" {
+  source_file = "./secrets/ssh-keys.secrets.yaml"
+}
+locals {
+  parsed   = yamldecode(data.sops_file.ssh_keys.raw)
+  ssh_keys = local.parsed.ssh_keys
+
+  # ssh-keys.secrets.yaml also carries each entry's private_key, so the
+  # whole decrypted blob (and anything derived from it, including
+  # ssh_keys above) is sensitive — Terraform won't allow that in a
+  # for_each even if you unwrap individual fields inline. Build a copy
+  # containing only the two non-secret fields actually needed, then
+  # strip sensitivity from that whole (already private_key-free) copy.
+  ssh_keys_public = nonsensitive([
+    for k in local.ssh_keys : { name = k.name, public_key = k.public_key }
+  ])
+}
+
+resource "aws_key_pair" "access_key_pairs" {
+  for_each   = { for k in local.ssh_keys_public : k.name => k.public_key }
+  key_name   = each.key
+  public_key = trimspace(each.value)
+}
