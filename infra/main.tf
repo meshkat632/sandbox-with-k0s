@@ -118,6 +118,12 @@ output "kubeconfig_secret_name" {
   value = module.kubeconfig_secret.secret_name
 }
 
+output "kubeconfig" {
+  description = "Current admin kubeconfig content (the placeholder until scripts/get_kubeconfig.sh has pushed the real one)"
+  value       = module.kubeconfig_secret.kubeconfig
+  sensitive   = true
+}
+
 data "sops_file" "ssh_keys" {
   source_file = "./secrets/ssh-keys.secrets.yaml"
 }

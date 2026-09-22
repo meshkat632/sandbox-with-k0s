@@ -18,3 +18,13 @@ resource "aws_secretsmanager_secret_version" "this" {
     ignore_changes = [secret_string]
   }
 }
+
+# Reads back whatever the CURRENT version actually is (the resource above
+# only ever reflects what IT wrote — the placeholder — since ignore_changes
+# stops Terraform from tracking get_kubeconfig.sh's out-of-band updates).
+# Data sources always refresh, so this surfaces the real kubeconfig once
+# it's been pushed, without Terraform ever having generated it itself.
+data "aws_secretsmanager_secret_version" "current" {
+  secret_id  = aws_secretsmanager_secret.this.id
+  depends_on = [aws_secretsmanager_secret_version.this]
+}

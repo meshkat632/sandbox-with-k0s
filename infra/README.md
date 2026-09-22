@@ -205,6 +205,15 @@ aws secretsmanager get-secret-value \
   --query SecretString --output text > ~/.kube/config-k0stool
 ```
 
+Or, without needing `secretsmanager:GetSecretValue` at all — a `kubeconfig`
+root output reads the same secret back (marked `sensitive`, so
+`terraform output` alone won't print it):
+```bash
+terraform output -raw kubeconfig > ~/.kube/config-k0stool
+```
+This shows the placeholder until `get_kubeconfig.sh` has pushed the real
+content at least once.
+
 Reaching the API server from outside the VPC needs two things:
 
 1. **Network access.** Port 6443 is only open to the VPC CIDR and to
