@@ -3,9 +3,9 @@ data "sops_file" "this" {
 }
 
 resource "aws_secretsmanager_secret" "this" {
-  name = var.secret_name
-  tags = var.tags
-  recovery_window_in_days  = var.recovery_window_in_days
+  name                    = var.secret_name
+  tags                    = var.tags
+  recovery_window_in_days = var.recovery_window_in_days
 }
 
 resource "aws_secretsmanager_secret_version" "this" {

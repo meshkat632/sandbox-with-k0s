@@ -51,7 +51,13 @@ module "network" {
   vpc_cidr            = var.vpc_cidr
   public_subnet_cidrs = var.public_subnet_cidrs
   ssh_cidr            = var.ssh_cidr
-  kube_api_cidrs      = var.kube_api_cidrs
+}
+
+module "api_server_access" {
+  source = "./tf-modules/api-server-access"
+
+  security_group_id = module.network.security_group_id
+  cidr_blocks       = var.kube_api_cidrs
 }
 
 module "ssm_profile" {
