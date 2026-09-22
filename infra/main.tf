@@ -12,7 +12,7 @@ provider "aws" {
 
 resource "aws_key_pair" "this" {
   key_name   = var.key_name
-  public_key = trimspace(file(pathexpand(var.public_key_path)))
+  public_key = trimspace(var.public_key != null ? var.public_key : file(pathexpand(var.public_key_path)))
 }
 
 module "tokens_secret" {

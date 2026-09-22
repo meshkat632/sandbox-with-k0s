@@ -92,7 +92,13 @@ variable "instance_count" {
 }
 
 variable "public_key_path" {
-  description = "Path to an OpenSSH public key file used to create the EC2 key pair. Not used by Terraform Cloud — set to a key pair you import there instead."
+  description = "Path to a local OpenSSH public key file used to create the EC2 key pair. Only usable where Terraform runs against your own filesystem — not Terraform Cloud, which sandboxes runs away from any local disk. Ignored if var.public_key is set."
   type        = string
   default     = "~/.k0stool/k0stool-key.pub"
+}
+
+variable "public_key" {
+  description = "Raw OpenSSH public key content (e.g. the contents of k0stool-key.pub) for the EC2 key pair. Takes precedence over public_key_path — set this as a Terraform Cloud workspace variable, since TFC runs can't read a local file."
+  type        = string
+  default     = null
 }
