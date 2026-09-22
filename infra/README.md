@@ -72,6 +72,12 @@ Useful knobs (vars or `-var` flags):
 | `ssh_cidr` | `0.0.0.0/0` | tighten to your IP once SSM is verified |
 | `public_key_path` | `~/.k0stool/k0stool-key.pub` | source of the `aws_key_pair` |
 | `kube_api_cidrs` | `[]` | CIDRs allowed to reach the k8s API (6443) from outside the VPC; empty = closed, use SSM tunnel instead |
+| `public_key` | `null` | raw public key content; set this (not `public_key_path`) on Terraform Cloud, which can't read a local file |
+| `name_suffix` | `null` (auto-random) | appended to every account/region-unique name so a second state (e.g. a TFC workspace) can run against the same AWS account without colliding. Leave unset for a new state; pin it (e.g. `""`) for a state with real resources already — changing it later renames, and therefore replaces, all of them |
+
+Running a second, independent stack against the same AWS account (e.g. a
+Terraform Cloud workspace alongside your local state) just needs its own
+state and to leave `name_suffix` unset — no other coordination required.
 
 Changing `instance_type` or the launch template replaces running nodes
 (new IPs, wiped disks).
