@@ -6,22 +6,29 @@ set -euo pipefail
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-i INSTANCE_ID] [-o OUTPUT_PATH]
+Usage: $(basename "$0") [-i INSTANCE_ID] [-o OUTPUT_PATH] [-k]
 
   -i INSTANCE_ID  Controller instance ID (default: first id in
                   'terraform output -json k0s_node_ids')
   -o OUTPUT_PATH  Where to write the kubeconfig (default: ~/.kube/config-k0stool)
+  -k              Skip TLS verification (insecure-skip-tls-verify: true).
+                  Needed for the public IP: k0s's API server cert only
+                  has SANs for the node's own private IP/localhost, not
+                  its public IP, so verification fails against it even
+                  though the connection itself is fine.
   -h              Show this help
 EOF
 }
 
 INSTANCE_ID=""
 OUTPUT_PATH="$HOME/.kube/config-k0stool"
+INSECURE=""
 
-while getopts "i:o:h" opt; do
+while getopts "i:o:kh" opt; do
   case "$opt" in
     i) INSTANCE_ID="$OPTARG" ;;
     o) OUTPUT_PATH="$OPTARG" ;;
+    k) INSECURE="1" ;;
     h) usage; exit 0 ;;
     *) usage; exit 1 ;;
   esac
@@ -84,10 +91,23 @@ umask 077
 # k0s embeds the node's own address (its private IP, or "localhost" on
 # some builds) as the API server host — replace whatever that is with
 # the public IP so the file works from outside the VPC.
-printf '%s\n' "$KUBECONFIG_CONTENT" | sed -E "s#https://[^:]+:6443#https://${PUBLIC_IP}:6443#" > "$OUTPUT_PATH"
+REWRITTEN=$(printf '%s\n' "$KUBECONFIG_CONTENT" | sed -E "s#https://[^:]+:6443#https://${PUBLIC_IP}:6443#")
+
+if [ -n "$INSECURE" ]; then
+  # drop the CA cert (verified against the private-IP SANs) and skip
+  # verification instead, since the cert has no SAN for the public IP.
+  REWRITTEN=$(printf '%s\n' "$REWRITTEN" | sed -E "s#^(\s*)certificate-authority-data:.*#\1insecure-skip-tls-verify: true#")
+fi
+
+printf '%s\n' "$REWRITTEN" > "$OUTPUT_PATH"
 
 echo "kubeconfig written to $OUTPUT_PATH (server: $(grep -oE 'https://[^ ]+:6443' "$OUTPUT_PATH" | head -1))" >&2
+if [ -n "$INSECURE" ]; then
+  echo "TLS verification disabled (-k) — cert has no SAN for the public IP." >&2
+fi
 echo "" >&2
 echo "  export KUBECONFIG=$OUTPUT_PATH" >&2
 echo "" >&2
-echo "note: port 6443 is only open to the VPC CIDR by default — see README for opening it to your IP or tunneling via SSM." >&2
+if [ -z "$INSECURE" ]; then
+  echo "note: kubectl will fail cert verification against the public IP (k0s's cert has no SAN for it) — pass -k, or tunnel via SSM (see README)." >&2
+fi

@@ -23,6 +23,18 @@ resource "aws_security_group" "this" {
     }
   }
 
+  dynamic "ingress" {
+    for_each = length(var.kube_api_cidrs) > 0 ? [1] : []
+
+    content {
+      description = "Kubernetes API from outside the VPC"
+      from_port   = 6443
+      to_port     = 6443
+      protocol    = "tcp"
+      cidr_blocks = var.kube_api_cidrs
+    }
+  }
+
   egress {
     from_port   = 0
     to_port     = 0

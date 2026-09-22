@@ -71,6 +71,7 @@ Useful knobs (vars or `-var` flags):
 | `instance_count` | `3` | 1 controller + 2 workers, spread across AZs |
 | `ssh_cidr` | `0.0.0.0/0` | tighten to your IP once SSM is verified |
 | `public_key_path` | `~/.k0stool/k0stool-key.pub` | source of the `aws_key_pair` |
+| `kube_api_cidrs` | `[]` | CIDRs allowed to reach the k8s API (6443) from outside the VPC; empty = closed, use SSM tunnel instead |
 
 Changing `instance_type` or the launch template replaces running nodes
 (new IPs, wiped disks).
@@ -140,16 +141,33 @@ scripts/get_kubeconfig.sh
 ```
 
 By default it targets the first node in `k0s_node_ids` and writes to
-`~/.kube/config-k0stool`, rewriting the API server address from
-`localhost` to the controller's public IP. Override with `-i <instance-id>`
-(if that first node isn't the controller) and `-o <path>`. It prints the
-`export KUBECONFIG=...` line to run afterward.
+`~/.kube/config-k0stool`, rewriting the API server address from k0s's
+internal address to the controller's public IP. Override with
+`-i <instance-id>` (if that first node isn't the controller) and
+`-o <path>`. It prints the `export KUBECONFIG=...` line to run afterward.
 
-Port 6443 is only open to the VPC CIDR by default (`ssh_cidr`/security group),
-not the internet — either widen the security group to your IP, or reach it
-through an SSM port-forward session (`aws ssm start-session --target <id>
---document-name AWS-StartPortForwardingSession --parameters '{"portNumber":["6443"],"localPortNumber":["6443"]}'`
-and point kubeconfig at `https://localhost:6443`).
+Reaching the API server from outside the VPC needs two things:
+
+1. **Network access.** Port 6443 is only open to the VPC CIDR and to
+   `var.kube_api_cidrs` (empty/closed by default). Set it, e.g.:
+   ```bash
+   terraform apply -var 'kube_api_cidrs=["<your-ip>/32"]'
+   ```
+   or reach it without opening anything, through an SSM port-forward
+   session instead:
+   ```bash
+   aws ssm start-session --target <controller-instance-id> \
+     --document-name AWS-StartPortForwardingSession \
+     --parameters '{"portNumber":["6443"],"localPortNumber":["6443"]}'
+   ```
+   (then point the kubeconfig's `server:` at `https://localhost:6443`).
+
+2. **A trusted certificate.** k0s's API server cert only has SANs for the
+   node's own private IP / localhost / cluster service IP — never the
+   public IP, so `kubectl` fails certificate verification even once the
+   port is open. Either tunnel via SSM above (the private IP/localhost
+   *are* in the SAN list), or pass `-k` to `get_kubeconfig.sh` to write
+   the file with `insecure-skip-tls-verify: true` instead of the CA data.
 
 ## Secrets (gitops)
 

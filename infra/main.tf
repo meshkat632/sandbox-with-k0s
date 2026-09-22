@@ -34,6 +34,7 @@ module "network" {
   vpc_cidr            = var.vpc_cidr
   public_subnet_cidrs = var.public_subnet_cidrs
   ssh_cidr            = var.ssh_cidr
+  kube_api_cidrs      = var.kube_api_cidrs
 }
 
 module "ssm_profile" {

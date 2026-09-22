@@ -58,6 +58,17 @@ variable "ssh_cidr" {
   }
 }
 
+variable "kube_api_cidrs" {
+  description = "CIDR blocks allowed to reach the Kubernetes API (port 6443) from outside the VPC. Empty (default) means no external access — use an SSM port-forward tunnel instead (see scripts/get_kubeconfig.sh)."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for c in var.kube_api_cidrs : can(cidrhost(c, 0))])
+    error_message = "kube_api_cidrs must be a list of valid IPv4 CIDR blocks."
+  }
+}
+
 variable "environment" {
   description = "Deployment environment. Drives tagging and access policies."
   type        = string
