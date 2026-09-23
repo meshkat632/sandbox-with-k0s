@@ -91,6 +91,12 @@ variable "instance_count" {
   }
 }
 
+variable "controller_enable_worker" {
+  description = "Whether node 1 (the controller, auto-bootstrapped by tf-modules/k0s-install) also schedules pods. true makes a single node a fully working cluster on its own — the right default while instance_count is 1. Turn it off once you have dedicated workers, if you'd rather isolate the control plane from workload traffic."
+  type        = bool
+  default     = true
+}
+
 variable "public_key_path" {
   description = "Path to a local OpenSSH public key file used to create the EC2 key pair. Only usable where Terraform runs against your own filesystem — not Terraform Cloud, which sandboxes runs away from any local disk. Ignored if var.public_key is set."
   type        = string

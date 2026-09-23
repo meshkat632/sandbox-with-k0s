@@ -42,6 +42,7 @@ and secrets delivered via sops-encrypted files committed to git.
 | `tf-modules/secrets-from-sops` | Decrypts a sops-encrypted file and stores it in AWS Secrets Manager | `source_file`, `secret_name`, `recovery_window_in_days` | `secret_arn`, `secret_id` |
 | `tf-modules/api-server-access` | Adds one `aws_vpc_security_group_ingress_rule` per CIDR for the k8s API port against an existing security group, so it can run alongside a security group's own inline-managed rules without conflict | `security_group_id`, `cidr_blocks`, `port` (default `6443`) | `rule_ids` |
 | `tf-modules/kubeconfig-secret` | Creates an (initially placeholder) Secrets Manager secret to hold the admin kubeconfig; `scripts/get_kubeconfig.sh` populates the real content after the controller is bootstrapped | `secret_name`, `recovery_window_in_days` | `secret_arn`, `secret_name` |
+| `tf-modules/k0s-install` | Runs `install_k0s.py` on one instance via `aws_ssm_association` (no SSH, no local-exec — works the same locally or from Terraform Cloud). Wired to node 1 as `role = "controller"`; `role = "worker"` needs a token you already have (see `scripts/join_workers.sh` for the fully-automated worker flow instead, which can generate one) | `instance_id`, `script_path`, `role`, `enable_worker`, `controller_ip`, `token` | `association_id` |
 
 Composition lives in [main.tf](main.tf); root variables in [variables.tf](variables.tf);
 root outputs (instance IPs, subnet ids, etc.) in [outputs.tf](outputs.tf).
@@ -71,6 +72,7 @@ Useful knobs (vars or `-var` flags):
 | `environment` | `dev` | name prefix: `k0stool-<env>-…` |
 | `instance_type` | `t3a.large` | minimum for multi-node k0s |
 | `instance_count` | `1` | start at 1, raise it later and join the new nodes — see "Scaling" below |
+| `controller_enable_worker` | `true` | node 1 also schedules pods, so a single node is a working cluster on its own; turn off once you have dedicated workers |
 | `ssh_cidr` | `0.0.0.0/0` | tighten to your IP once SSM is verified |
 | `public_key_path` | `~/.k0stool/k0stool-key.pub` | source of the `aws_key_pair` |
 | `kube_api_cidrs` | `[]` | CIDRs allowed to reach the k8s API (6443) from outside the VPC; empty = closed, use SSM tunnel instead |
@@ -94,14 +96,12 @@ them, or run the same install command over SSM (see below).
 Start with a single node and grow the cluster as needed, without touching
 already-running nodes:
 
-1. **Bootstrap node 1 as a controller that also runs pods**, so a single
-   node is a fully working cluster on its own. SSH or SSM in (see
-   "Connect to the nodes" below), copy `scripts/install_k0s.py` over, then:
-   ```bash
-   sudo python3 install_k0s.py --role controller --enable-worker
-   ```
-   Do **not** use `k0s install controller --single` — that mode can never
-   join other nodes later, even with `--enable-worker`.
+1. **Node 1 bootstraps itself as a controller automatically** — `tf-modules/k0s-install`
+   runs `install_k0s.py --role controller` on it via `aws_ssm_association` as
+   part of `terraform apply` (no manual SSH/SSM step needed). `controller_enable_worker`
+   (default `true`) also makes it schedule pods, so a single node is a fully
+   working cluster on its own. This never uses `k0s install controller --single`
+   — that mode can never join other nodes later, even with `--enable-worker`.
 
 2. **When you need more capacity, raise `instance_count` and apply.**
    `aws_instance` is count-indexed, so this only ever appends new

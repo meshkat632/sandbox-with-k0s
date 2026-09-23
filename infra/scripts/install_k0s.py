@@ -66,7 +66,7 @@ def wait_until_running(deadline_s=180):
 
 
 def install_controller(enable_worker):
-    cmd = [K0S_BIN, "install", "controller"]
+    cmd = [K0S_BIN, "install", "controller", "--force"]
     if enable_worker:
         cmd.append("--enable-worker")
     run(cmd)

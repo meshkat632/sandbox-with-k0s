@@ -106,8 +106,21 @@ module "k0s_nodes" {
   instance_count     = var.instance_count
 }
 
+module "k0s_controller_install" {
+  source = "./tf-modules/k0s-install"
+
+  instance_id   = module.k0s_nodes.instance_ids[0]
+  script_path   = "${path.root}/scripts/install_k0s.py"
+  role          = "controller"
+  enable_worker = var.controller_enable_worker
+}
+
 output "tokens_secret_arn" {
   value = module.tokens_secret.secret_arn
+}
+
+output "k0s_controller_install_association_id" {
+  value = module.k0s_controller_install.association_id
 }
 
 output "kubeconfig_secret_arn" {
