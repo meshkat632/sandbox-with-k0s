@@ -11,7 +11,7 @@ worker, has a fixed Elastic IP, and is provisioned by cloud-init.
 - Elastic IP, so the address survives stop/start
 - Key pair (public key from `secrets.yaml`), security group (SSH `22` and
   Kubernetes API `6443`, both limited to `allowed_cidrs`; HTTP `80` and HTTPS
-  `443` for ingress-nginx, open to `web_allowed_cidrs`, the internet by default)
+  `443` for the Gateway (Traefik), open to `web_allowed_cidrs`, the internet by default)
 - IAM role + instance profile: SSM, EBS CSI and ECR pull policies, and write
   access to the kubeconfig secret
 - Secrets Manager secret `codespace-kubeconfig` holding the admin kubeconfig

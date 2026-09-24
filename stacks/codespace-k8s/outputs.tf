@@ -8,12 +8,12 @@ output "cluster_endpoint" {
   value       = nonsensitive(local.kubeconfig.clusters[0].cluster.server) # the address only, not credentials
 }
 
-output "ingress_nginx" {
-  description = "ingress-nginx release and the URL it serves on (ports 80/443 of the instance)."
+output "gateway" {
+  description = "Shared Gateway that routes attach to, and the address Traefik serves it on (ports 80/443 of the instance)."
   value = {
-    namespace = helm_release.ingress_nginx.namespace
-    version   = helm_release.ingress_nginx.version
-    url       = "http://${local.public_host}"
+    name      = local.gateway.name
+    namespace = local.gateway.namespace
+    address   = local.public_host
   }
 }
 

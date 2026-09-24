@@ -1,5 +1,5 @@
-{{- if .Values.ingress.enabled }}
-Served through the {{ .Values.ingress.className }} ingress at {{ .Values.ingress.host | default "<any host>" }}{{ .Values.ingress.path }}
+{{- if .Values.httpRoute.enabled }}
+Served through Gateway {{ range .Values.httpRoute.parentRefs }}{{ .namespace | default "." }}/{{ .name }} {{ end }}at {{ .Values.httpRoute.hostnames | join ", " | default "<listener hostnames>" }}{{ .Values.httpRoute.path }}
 {{- else }}
 kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "nginx-hello-world.fullname" . }} 8080:{{ .Values.service.port }}
 then open http://localhost:8080

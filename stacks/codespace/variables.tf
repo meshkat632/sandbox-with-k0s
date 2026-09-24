@@ -46,7 +46,7 @@ variable "allowed_cidrs" {
 }
 
 variable "web_allowed_cidrs" {
-  description = "CIDRs allowed to reach HTTP (80) and HTTPS (443) on the instance, where ingress-nginx listens. Unlike allowed_cidrs, the whole internet is fine here; [] closes both ports."
+  description = "CIDRs allowed to reach HTTP (80) and HTTPS (443) on the instance, where Traefik serves the Gateway. Unlike allowed_cidrs, the whole internet is fine here; [] closes both ports."
   type        = list(string)
   default     = ["0.0.0.0/0"]
 

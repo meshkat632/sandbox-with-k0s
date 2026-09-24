@@ -1,0 +1,19 @@
+# Account email for Let's Encrypt (expiry and account notices). Required.
+email: ""
+
+# How the HTTP-01 challenge is served: "ingress" (an Ingress of
+# ingressClassName) or "gateway" (an HTTPRoute attached to the gateway below)
+solver: gateway
+
+ingressClassName: nginx
+
+gateway:
+  name: public
+  namespace: gateway
+  # Listener the solver routes attach to (plain HTTP on port 80)
+  sectionName: http
+
+# One ClusterIssuer per entry, named letsencrypt-<key>
+servers:
+  staging: https://acme-staging-v02.api.letsencrypt.org/directory
+  prod: https://acme-v02.api.letsencrypt.org/directory

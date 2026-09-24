@@ -20,17 +20,18 @@ service:
   type: ClusterIP
   port: 80
 
-ingress:
-  enabled: true
-  className: nginx
-  annotations: {}
-  # Empty host matches every hostname
-  host: ""
+# Gateway API route. Off by default, so the chart also installs without a
+# Gateway (reach it with kubectl port-forward then)
+httpRoute:
+  enabled: false
+  # Gateways (and optionally their listener, sectionName) to attach to, e.g.
+  #  - name: public
+  #    namespace: gateway
+  #    sectionName: https-hello
+  parentRefs: []
+  # Empty matches the listener's hostnames
+  hostnames: []
   path: /
-  pathType: Prefix
-  tls: []
-  #  - secretName: hello-tls
-  #    hosts: [hello.example.com]
 
 resources:
   requests:

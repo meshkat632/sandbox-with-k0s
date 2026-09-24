@@ -1,0 +1,5 @@
+apiVersion: v2
+name: letsencrypt-issuers
+description: cert-manager ClusterIssuers for Let's Encrypt (staging and production) using HTTP-01 through an Ingress class or a Gateway API Gateway.
+type: application
+version: 0.2.0

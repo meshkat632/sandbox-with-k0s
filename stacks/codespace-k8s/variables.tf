@@ -32,12 +32,6 @@ variable "namespaces" {
   }
 }
 
-variable "ingress_nginx_chart_version" {
-  description = "Version of the ingress-nginx Helm chart."
-  type        = string
-  default     = "4.15.1"
-}
-
 variable "cert_manager_chart_version" {
   description = "Version of the cert-manager Helm chart."
   type        = string
@@ -56,7 +50,7 @@ variable "letsencrypt_email" {
 }
 
 variable "letsencrypt_environment" {
-  description = "Let's Encrypt server for the hello-world certificate: \"staging\" (untrusted certificates, generous rate limits) or \"prod\"."
+  description = "Let's Encrypt server for the Gateway's certificates: \"staging\" (untrusted certificates, generous rate limits) or \"prod\"."
   type        = string
   default     = "prod"
 
@@ -70,4 +64,21 @@ variable "hello_host" {
   description = "Hostname of the hello-world app. It must resolve to the instance's Elastic IP. Null means hello.<ip-with-dashes>.sslip.io."
   type        = string
   default     = null
+}
+
+variable "gateway_api_version" {
+  description = "Gateway API release whose standard-channel CRDs are installed. Keep it at a version the Traefik chart supports."
+  type        = string
+  default     = "v1.5.1"
+
+  validation {
+    condition     = can(regex("^v[0-9]+\\.[0-9]+\\.[0-9]+$", var.gateway_api_version))
+    error_message = "gateway_api_version must look like v1.5.1."
+  }
+}
+
+variable "traefik_chart_version" {
+  description = "Version of the Traefik Helm chart."
+  type        = string
+  default     = "41.6.0"
 }

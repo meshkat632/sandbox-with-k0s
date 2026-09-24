@@ -1,0 +1,47 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.name }}
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+  {{- with .Values.clusterIssuer }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ . }}
+  {{- end }}
+spec:
+  gatewayClassName: {{ .Values.gatewayClassName }}
+  listeners:
+    # Plain HTTP: only routes from this namespace (the redirect and
+    # cert-manager's HTTP-01 solver routes) attach here
+    - name: http
+      protocol: HTTP
+      port: {{ .Values.httpPort }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- range $key, $host := .Values.hosts }}
+    - name: https-{{ $key }}
+      protocol: HTTPS
+      port: {{ $.Values.httpsPort }}
+      hostname: {{ $host | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ $key }}-tls
+      allowedRoutes:
+        kinds:
+          - kind: HTTPRoute
+        namespaces:
+          {{- if $.Values.routeNamespaces }}
+          from: Selector
+          selector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- toYaml $.Values.routeNamespaces | nindent 18 }}
+          {{- else }}
+          from: Same
+          {{- end }}
+    {{- end }}
