@@ -17,6 +17,7 @@ terraform.rc
 # Environment variables
 .env
 .env.*
+!.env.example
 
 # JetBrains IDE
 .idea/

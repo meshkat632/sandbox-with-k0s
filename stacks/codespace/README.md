@@ -29,32 +29,74 @@ to the secret.
 
 ## Prerequisites
 
-- `terraform` >= 1.6, `aws` CLI, `kubectl`, `sops`
-- AWS credentials with rights for EC2, IAM, Secrets Manager and SSM
-- The SOPS key configured in the repo's `.sops.yaml`
+- `terraform` >= 1.6, `aws` CLI, `kubectl`, [`sops`](https://github.com/getsops/sops),
+  [`age`](https://github.com/FiloSottile/age), `ssh-keygen`
+- An AWS account and credentials (a named profile) with rights for EC2, IAM,
+  Secrets Manager and SSM
 
-## Setup
+## Quick start
 
-Create `.env` in this directory (it is sourced by the Makefile):
+Run everything from `stacks/codespace/`.
+
+**1. Create your age key** (used by sops to encrypt `secrets.yaml`). Skip if you
+already have one at `~/.config/sops/age/keys.txt`.
 
 ```sh
-export AWS_PROFILE=<your-profile>
-export TF_VAR_allowed_cidrs='["203.0.113.10/32"]'   # your public IP
+mkdir -p ~/.config/sops/age
+age-keygen -o ~/.config/sops/age/keys.txt
+age-keygen -y ~/.config/sops/age/keys.txt      # prints your public key (age1...)
 ```
 
-`secrets.yaml` is SOPS-encrypted and holds the DB credentials and SSH key
-pair used for the instance. Use `make decrypt` / `make encrypt` to edit it.
-The private key is used by Terraform for the readiness check and the
-kubeconfig push. To SSH yourself (`make ssh`) put it at
-`~/.ssh/codespace_ed25519` (override with `SSH_KEY=`).
+Put that public key in the repo's `.sops.yaml` under `age:`, replacing the
+existing recipients (they belong to the repo author, so you cannot decrypt
+files encrypted for them).
 
-## Usage
+**2. Create the instance SSH key.** `make ssh` expects it at
+`~/.ssh/codespace_ed25519` (override with `SSH_KEY=`):
+
+```sh
+ssh-keygen -t ed25519 -N "" -C you@example.com -f ~/.ssh/codespace_ed25519
+```
+
+**3. Create `.env`** from the template (the Makefile sources it):
+
+```sh
+cp .env.example .env
+$EDITOR .env                 # set AWS_PROFILE and TF_VAR_allowed_cidrs (your IP)
+```
+
+`.env.example` explains each variable. To fill in your public IP:
+
+```sh
+echo "export TF_VAR_allowed_cidrs='[\"$(curl -s https://checkip.amazonaws.com)/32\"]'"
+```
+
+**4. Create `secrets.yaml`** from the template, fill in the DB password, your
+`public_key` (`~/.ssh/codespace_ed25519.pub`) and `private_key`
+(`~/.ssh/codespace_ed25519`), then encrypt it (`make` needs the `.env` from step 3):
+
+```sh
+cp secrets.yaml.example secrets.yaml
+$EDITOR secrets.yaml
+make encrypt                 # encrypts password and private_key values in place
+```
+
+Terraform uses the private key for the readiness check and the kubeconfig
+push, so it stays in Terraform's state: keep `terraform.tfstate` private (it is
+gitignored). Use `make decrypt` / `make encrypt` to edit the file later.
+
+**5. Provision and connect:**
 
 ```sh
 make plan          # init + validate + plan, saved to ./tfplan
-make apply         # apply the saved plan
+make apply         # ~5 min: creates the instance, installs k0s, pushes the kubeconfig
 make kubeconfig    # merge the cluster into ~/.kube/config and switch to it
+kubectl get nodes
 ```
+
+**6. Tear down** when you are done: `make destroy`.
+
+## Make targets
 
 Run `make help` for all targets.
 
