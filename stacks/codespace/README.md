@@ -10,7 +10,8 @@ worker, has a fixed Elastic IP, and is provisioned by cloud-init.
   the default VPC if unset
 - Elastic IP, so the address survives stop/start
 - Key pair (public key from `secrets.yaml`), security group (SSH `22` and
-  Kubernetes API `6443`, both limited to `allowed_cidrs`)
+  Kubernetes API `6443`, both limited to `allowed_cidrs`; HTTP `80` and HTTPS
+  `443` for ingress-nginx, open to `web_allowed_cidrs`, the internet by default)
 - IAM role + instance profile: SSM, EBS CSI and ECR pull policies, and write
   access to the kubeconfig secret
 - Secrets Manager secret `codespace-kubeconfig` holding the admin kubeconfig
@@ -209,6 +210,7 @@ keeps only the first 24,000 characters of kubectl's output.
 | Variable                 | Default                  | Description                                        |
 | ------------------------ | ------------------------ | -------------------------------------------------- |
 | `allowed_cidrs`          | (required)               | CIDRs allowed to reach SSH and the API server      |
+| `web_allowed_cidrs`      | `["0.0.0.0/0"]`          | CIDRs allowed to reach HTTP/HTTPS; `[]` closes them |
 | `region`                 | `eu-central-1`           | AWS region                                         |
 | `tags`                   | Project, Environment, ManagedBy | Default tags on every resource              |
 | `subnet_id`              | `null` (default VPC)     | Subnet for the instance                            |

@@ -104,6 +104,18 @@ resource "aws_security_group" "this" {
     cidr_blocks = var.allowed_cidrs
   }
 
+  dynamic "ingress" {
+    for_each = length(var.web_allowed_cidrs) > 0 ? { HTTP = 80, HTTPS = 443 } : {}
+
+    content {
+      description = "${ingress.key} (ingress-nginx on the host ports)"
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "tcp"
+      cidr_blocks = var.web_allowed_cidrs
+    }
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0

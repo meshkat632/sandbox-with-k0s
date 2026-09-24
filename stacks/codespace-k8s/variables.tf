@@ -31,3 +31,9 @@ variable "namespaces" {
     error_message = "Built-in namespaces (default, kube-system, kube-public, kube-node-lease) already exist and must not be managed here."
   }
 }
+
+variable "ingress_nginx_chart_version" {
+  description = "Version of the ingress-nginx Helm chart."
+  type        = string
+  default     = "4.15.1"
+}

@@ -45,6 +45,17 @@ variable "allowed_cidrs" {
   }
 }
 
+variable "web_allowed_cidrs" {
+  description = "CIDRs allowed to reach HTTP (80) and HTTPS (443) on the instance, where ingress-nginx listens. Unlike allowed_cidrs, the whole internet is fine here; [] closes both ports."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+
+  validation {
+    condition     = alltrue([for c in var.web_allowed_cidrs : can(cidrhost(c, 0))])
+    error_message = "Each entry of web_allowed_cidrs must be a valid CIDR block."
+  }
+}
+
 variable "subnet_id" {
   description = "Subnet for the instance. If null, the first default subnet of the default VPC is used."
   type        = string

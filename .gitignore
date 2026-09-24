@@ -3,6 +3,8 @@
 *.tfstate
 *.tfstate.*
 crash.log
+# Saved plans can contain secrets
+tfplan
 crash.*.log
 *.tfvars
 *.tfvars.json
@@ -15,6 +17,10 @@ terraform.rc
 .terraform.lock.hcl
 # Stacks commit their lock file so local and Terraform Cloud runs use the same provider builds
 !/stacks/*/.terraform.lock.hcl
+
+# Python
+.venv/
+__pycache__/
 
 # Environment variables
 .env
