@@ -1,0 +1,90 @@
+#!/bin/bash
+# Installs k0s as a single-node Kubernetes cluster (controller + worker) on ${name}.
+# Installed at /opt/codespace/k0s.sh and run by cloud-init after bootstrap.sh.
+# Safe to re-run by hand: sudo /opt/codespace/k0s.sh
+set -euo pipefail
+exec > >(tee -a /var/log/codespace-k0s.log) 2>&1
+
+echo "=== k0s install start: $(date -Is) ==="
+
+K0S_VERSION="${k0s_version}" # empty = latest stable
+DEV_USER="ubuntu"
+HOME_DIR="/home/$DEV_USER"
+
+# --- 1. Install the k0s binary -------------------------------------------------
+if ! command -v k0s > /dev/null; then
+  if [ -n "$K0S_VERSION" ]; then export K0S_VERSION; else unset K0S_VERSION; fi
+  curl -sSfL https://get.k0s.sh | sh
+fi
+k0s version
+
+# --- 2. Config: add the public IP to the API server certificate ---------------
+# So kubectl from your laptop can talk to https://<public-ip>:6443.
+# Terraform passes the Elastic IP; fall back to instance metadata if empty.
+PUBLIC_IP="${public_ip}"
+if [ -z "$PUBLIC_IP" ]; then
+  TOKEN=$(curl -sS -X PUT http://169.254.169.254/latest/api/token \
+    -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+  PUBLIC_IP=$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \
+    http://169.254.169.254/latest/meta-data/public-ipv4 || true)
+fi
+echo "public IP: $PUBLIC_IP"
+
+mkdir -p /etc/k0s
+if [ ! -f /etc/k0s/k0s.yaml ]; then
+  k0s config create > /etc/k0s/k0s.yaml
+  PUBLIC_IP="$PUBLIC_IP" python3 - <<'EOF'
+import os, yaml
+path = "/etc/k0s/k0s.yaml"
+ip = os.environ.get("PUBLIC_IP", "").strip()
+cfg = yaml.safe_load(open(path))
+if ip:
+    sans = cfg["spec"]["api"].setdefault("sans", []) or []
+    if ip not in sans:
+        sans.append(ip)
+    cfg["spec"]["api"]["sans"] = sans
+yaml.safe_dump(cfg, open(path, "w"), default_flow_style=False, sort_keys=False)
+EOF
+fi
+
+# --- 3. Install and start the single-node controller --------------------------
+if [ ! -f /etc/systemd/system/k0scontroller.service ]; then
+  k0s install controller --single -c /etc/k0s/k0s.yaml
+fi
+systemctl daemon-reload
+systemctl enable --now k0scontroller
+
+# --- 4. Wait until the node is Ready -------------------------------------------
+echo "Waiting for the node to become Ready ..."
+for i in $(seq 1 60); do
+  if k0s kubectl get nodes 2> /dev/null | grep -q " Ready"; then
+    echo "node Ready after ~$((i * 5))s"
+    break
+  fi
+  if [ "$i" -eq 60 ]; then
+    echo "ERROR: node not Ready after 5 minutes" >&2
+    k0s status || true
+    exit 1
+  fi
+  sleep 5
+done
+
+# --- 5. kubectl for the ubuntu user -------------------------------------------
+install -d -m 700 -o "$DEV_USER" -g "$DEV_USER" "$HOME_DIR/.kube"
+k0s kubeconfig admin > "$HOME_DIR/.kube/config"
+chown "$DEV_USER:$DEV_USER" "$HOME_DIR/.kube/config"
+chmod 600 "$HOME_DIR/.kube/config"
+
+# k0s kubectl falls back to the root-only /var/lib/k0s/pki/admin.conf when
+# KUBECONFIG is unset, so point it at the user's own kubeconfig.
+cat > /usr/local/bin/kubectl <<'EOF'
+#!/bin/sh
+if [ -z "$KUBECONFIG" ] && [ -r "$HOME/.kube/config" ]; then
+  export KUBECONFIG="$HOME/.kube/config"
+fi
+exec k0s kubectl "$@"
+EOF
+chmod 755 /usr/local/bin/kubectl
+
+k0s kubectl get nodes -o wide
+echo "=== k0s install done: $(date -Is) ==="

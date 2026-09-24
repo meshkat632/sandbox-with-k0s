@@ -1,0 +1,34 @@
+#!/bin/bash
+# Bootstrap script for ${name}
+# Installed at /opt/codespace/bootstrap.sh and run once by cloud-init on first boot.
+# Safe to re-run by hand: sudo /opt/codespace/bootstrap.sh
+set -euo pipefail
+exec > >(tee -a /var/log/codespace-bootstrap.log) 2>&1
+
+echo "=== bootstrap start: $(date -Is) ==="
+
+export DEBIAN_FRONTEND=noninteractive
+DEV_USER="ubuntu"
+HOME_DIR="/home/$DEV_USER"
+
+# --- 1. Base packages --------------------------------------------------------
+apt-get update -q
+apt-get install -y -q \
+  git curl wget unzip jq htop tmux make \
+  python3 python3-venv python3-pip python3-dev build-essential
+
+# --- 2. Python virtualenv for the dev user ----------------------------------
+if [ ! -d "$HOME_DIR/.venvs/dev" ]; then
+  sudo -u "$DEV_USER" -H python3 -m venv "$HOME_DIR/.venvs/dev"
+fi
+sudo -u "$DEV_USER" -H "$HOME_DIR/.venvs/dev/bin/pip" install -q --upgrade pip %{ for p in python_packages ~}${p} %{ endfor }
+
+grep -q ".venvs/dev/bin/activate" "$HOME_DIR/.bashrc" ||
+  echo "source $HOME_DIR/.venvs/dev/bin/activate" >> "$HOME_DIR/.bashrc"
+
+# --- 3. Workspace ------------------------------------------------------------
+sudo -u "$DEV_USER" mkdir -p "$HOME_DIR/workspace"
+
+# --- Done --------------------------------------------------------------------
+touch /var/lib/codespace-bootstrap.done
+echo "=== bootstrap done: $(date -Is) ==="
