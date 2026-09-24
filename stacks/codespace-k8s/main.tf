@@ -79,17 +79,77 @@ resource "helm_release" "ingress_nginx" {
 }
 
 # =============================================================================
-# nginx-hello-world: the local chart in charts/ at the repo root, served at /
-# on the ingress NodePorts.
+# cert-manager + Let's Encrypt
+# ClusterIssuers letsencrypt-staging and letsencrypt-prod solve HTTP-01
+# challenges through ingress-nginx on port 80, so no DNS access is needed.
 # =============================================================================
 
 locals {
-  hello_chart = "${path.module}/../../charts/nginx-hello-world"
+  charts_dir = "${path.module}/../../charts"
+
+  # Terraform only sees chart changes through its inputs, so each local chart
+  # gets a hash of its files as a value: editing any of them triggers an upgrade.
+  chart_checksum = {
+    for c in ["nginx-hello-world", "letsencrypt-issuers"] :
+    c => sha256(join("", [for f in sort(fileset("${local.charts_dir}/${c}", "**")) : filesha256("${local.charts_dir}/${c}/${f}")]))
+  }
+}
+
+resource "helm_release" "cert_manager" {
+  name             = "cert-manager"
+  repository       = "https://charts.jetstack.io"
+  chart            = "cert-manager"
+  version          = var.cert_manager_chart_version
+  namespace        = "cert-manager"
+  create_namespace = true
+
+  values = [
+    yamlencode({
+      crds = {
+        enabled = true
+        keep    = true # uninstalling the release must not delete every Certificate
+      }
+    })
+  ]
+
+  atomic  = true
+  wait    = true
+  timeout = 600
+}
+
+resource "helm_release" "letsencrypt_issuers" {
+  name      = "letsencrypt-issuers"
+  chart     = "${local.charts_dir}/letsencrypt-issuers"
+  namespace = helm_release.cert_manager.namespace
+
+  values = [
+    yamlencode({
+      email            = var.letsencrypt_email
+      ingressClassName = "nginx"
+      chartChecksum    = local.chart_checksum["letsencrypt-issuers"]
+    })
+  ]
+
+  atomic = true
+  wait   = true
+
+  # The cert-manager webhook must be up to accept ClusterIssuers
+  depends_on = [helm_release.cert_manager]
+}
+
+# =============================================================================
+# nginx-hello-world: the local chart in charts/ at the repo root, served over
+# HTTPS at var.hello_host with a Let's Encrypt certificate.
+# =============================================================================
+
+locals {
+  # sslip.io resolves <a-b-c-d>.sslip.io to a.b.c.d, so no DNS record is needed
+  hello_host = coalesce(var.hello_host, "hello.${replace(local.public_host, ".", "-")}.sslip.io")
 }
 
 resource "helm_release" "nginx_hello_world" {
   name      = "nginx-hello-world"
-  chart     = local.hello_chart
+  chart     = "${local.charts_dir}/nginx-hello-world"
   namespace = kubernetes_namespace_v1.this["apps"].metadata[0].name
 
   values = [
@@ -100,11 +160,17 @@ resource "helm_release" "nginx_hello_world" {
       }
       ingress = {
         className = "nginx"
+        host      = local.hello_host
+        annotations = {
+          "cert-manager.io/cluster-issuer" = "letsencrypt-${var.letsencrypt_environment}"
+        }
+        tls = [{
+          secretName = "nginx-hello-world-tls"
+          hosts      = [local.hello_host]
+        }]
       }
       podAnnotations = {
-        # Terraform only sees chart changes through its inputs, so feed it a
-        # hash of the chart files: editing any of them triggers an upgrade.
-        "checksum/chart" = sha256(join("", [for f in sort(fileset(local.hello_chart, "**")) : filesha256("${local.hello_chart}/${f}")]))
+        "checksum/chart" = local.chart_checksum["nginx-hello-world"]
       }
     })
   ]
@@ -113,6 +179,7 @@ resource "helm_release" "nginx_hello_world" {
   wait    = true
   timeout = 300
 
-  # The ingress-nginx admission webhook must be up before the Ingress is accepted
-  depends_on = [helm_release.ingress_nginx]
+  # The ingress-nginx admission webhook must be up before the Ingress is
+  # accepted, and the issuer must exist before cert-manager can act on it
+  depends_on = [helm_release.ingress_nginx, helm_release.letsencrypt_issuers]
 }

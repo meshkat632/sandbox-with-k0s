@@ -16,3 +16,8 @@ output "ingress_nginx" {
     url       = "http://${local.public_host}"
   }
 }
+
+output "hello_url" {
+  description = "HTTPS URL of the hello-world app."
+  value       = "https://${local.hello_host}"
+}

@@ -37,3 +37,37 @@ variable "ingress_nginx_chart_version" {
   type        = string
   default     = "4.15.1"
 }
+
+variable "cert_manager_chart_version" {
+  description = "Version of the cert-manager Helm chart."
+  type        = string
+  default     = "v1.21.2"
+}
+
+variable "letsencrypt_email" {
+  description = "Email for the Let's Encrypt account (expiry and account notices)."
+  type        = string
+  default     = "meshkat632@gmail.com"
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.letsencrypt_email))
+    error_message = "letsencrypt_email must be an email address."
+  }
+}
+
+variable "letsencrypt_environment" {
+  description = "Let's Encrypt server for the hello-world certificate: \"staging\" (untrusted certificates, generous rate limits) or \"prod\"."
+  type        = string
+  default     = "prod"
+
+  validation {
+    condition     = contains(["staging", "prod"], var.letsencrypt_environment)
+    error_message = "letsencrypt_environment must be \"staging\" or \"prod\"."
+  }
+}
+
+variable "hello_host" {
+  description = "Hostname of the hello-world app. It must resolve to the instance's Elastic IP. Null means hello.<ip-with-dashes>.sslip.io."
+  type        = string
+  default     = null
+}

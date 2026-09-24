@@ -8,8 +8,14 @@ the Terraform `kubernetes` provider. Currently: the namespaces in
 (Helm release in namespace `ingress-nginx`, default IngressClass `nginx`), and
 `nginx-hello-world`, a static page from the local chart
 [`charts/nginx-hello-world`](../../charts/nginx-hello-world)
-installed in `apps` and served at `/` through the ingress. Any edit to the
-chart's files triggers a Helm upgrade on the next apply.
+installed in `apps` and served over HTTPS at `hello_url` (by default
+`https://hello.<ip-with-dashes>.sslip.io`, which resolves to the Elastic IP
+with no DNS setup). [cert-manager](https://cert-manager.io) gets its
+certificate from Let's Encrypt through the ClusterIssuers in
+[`charts/letsencrypt-issuers`](../../charts/letsencrypt-issuers)
+(`letsencrypt-staging`, `letsencrypt-prod`; HTTP-01 over port 80), and
+ingress-nginx redirects HTTP to HTTPS. Any edit to a local chart's files
+triggers a Helm upgrade on the next apply.
 
 It is a separate stack on purpose. The codespace stack only makes AWS API
 calls, so it can run anywhere. This one talks to the Kubernetes API on port
@@ -47,10 +53,14 @@ The Makefile sources `../codespace/.env` (override with `ENV_FILE=`); only
 | `region`                 | `eu-central-1`         | Region of the kubeconfig secret                     |
 | `kubeconfig_secret_name` | `codespace-kubeconfig` | Must match the codespace stack's secret name        |
 | `ingress_nginx_chart_version` | `4.15.1`          | ingress-nginx Helm chart version                    |
+| `cert_manager_chart_version` | `v1.21.2`          | cert-manager Helm chart version                     |
+| `letsencrypt_email`      | `meshkat632@gmail.com` | Let's Encrypt account email                         |
+| `letsencrypt_environment`| `prod`                 | `staging` or `prod` issuer for the hello-world cert |
+| `hello_host`             | `null` (sslip.io name) | Hostname of hello-world; must resolve to the EIP    |
 
 ## Outputs
 
-`namespaces`, `cluster_endpoint`, `ingress_nginx` (namespace, chart version, public URL).
+`namespaces`, `cluster_endpoint`, `ingress_nginx` (namespace, chart version, public URL), `hello_url`.
 
 ## Notes
 
@@ -58,6 +68,10 @@ The Makefile sources `../codespace/.env` (override with `ENV_FILE=`); only
   (hostPort; there is no cloud load balancer), so the site is at
   `http://<Elastic IP>` (see the `ingress_nginx.url` output). The codespace
   stack's security group opens 80/443 to its `web_allowed_cidrs`.
+- Let's Encrypt must reach port 80 for HTTP-01, so narrowing
+  `web_allowed_cidrs` stops certificate issuance and renewal. Try new
+  hostnames with `letsencrypt_environment = "staging"` first: production has
+  strict rate limits. Only hostnames get the site; the bare IP returns 404.
 - Removing a namespace from `namespaces` (or `make destroy`) deletes it and
   **everything in it**.
 - If the codespace instance is replaced, the new cluster starts without these
