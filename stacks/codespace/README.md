@@ -10,7 +10,8 @@ worker, has a fixed Elastic IP, and is provisioned by cloud-init.
 - Elastic IP, so the address survives stop/start
 - Key pair (public key from `secrets.yaml`), security group (SSH `22` and
   Kubernetes API `6443`, both limited to `allowed_cidrs`)
-- IAM role + instance profile: SSM, plus EBS CSI and ECR pull policies
+- IAM role + instance profile: SSM, EBS CSI and ECR pull policies, and write
+  access to the kubeconfig secret
 - Secrets Manager secret `codespace-kubeconfig` holding the admin kubeconfig
 
 On first boot cloud-init runs, in order:
@@ -20,9 +21,12 @@ On first boot cloud-init runs, in order:
 2. `scripts/k0s.sh.tftpl`: installs k0s as a single-node controller, adds the
    Elastic IP to the API certificate, and sets up `kubectl` for `ubuntu`
 
-Terraform then waits until the instance is healthy (EC2 status checks, SSM
-online, cloud-init done, `kubectl get nodes`) and pushes the kubeconfig
-to the secret.
+As its last step, `k0s.sh` writes the admin kubeconfig to the Secrets Manager
+secret, using the instance role. Terraform itself never connects to the
+instance, so it can run anywhere, including Terraform Cloud runners, without
+their IPs being allowed in the security group. The instance takes a few
+minutes after `apply` to finish; `make kubeconfig` reports "holds no
+kubeconfig yet" until it has.
 
 > Any change to the scripts or their variables **replaces the instance**
 > (`user_data_replace_on_change`), because cloud-init only runs on first boot.
@@ -71,25 +75,23 @@ $EDITOR .env                 # set AWS_PROFILE and TF_VAR_allowed_cidrs (your IP
 echo "export TF_VAR_allowed_cidrs='[\"$(curl -s https://checkip.amazonaws.com)/32\"]'"
 ```
 
-**4. Create `secrets.yaml`** from the template, fill in the DB password, your
-`public_key` (`~/.ssh/codespace_ed25519.pub`) and `private_key`
-(`~/.ssh/codespace_ed25519`), then encrypt it (`make` needs the `.env` from step 3):
+**4. Create `secrets.yaml`** from the template, fill in the DB password and your
+`public_key` (`~/.ssh/codespace_ed25519.pub`), then encrypt it (`make` needs the `.env` from step 3):
 
 ```sh
 cp secrets.yaml.example secrets.yaml
 $EDITOR secrets.yaml
-make encrypt                 # encrypts password and private_key values in place
+make encrypt                 # encrypts the password values in place
 ```
 
-Terraform uses the private key for the readiness check and the kubeconfig
-push, so it stays in Terraform's state: keep `terraform.tfstate` private (it is
-gitignored). Use `make decrypt` / `make encrypt` to edit the file later.
+Use `make decrypt` / `make encrypt` to edit the file later. The private key
+stays in `~/.ssh`; Terraform only needs the public key.
 
 **5. Provision and connect:**
 
 ```sh
 make plan          # init + validate + plan, saved to ./tfplan
-make apply         # ~5 min: creates the instance, installs k0s, pushes the kubeconfig
+make apply         # creates the instance; k0s installs and publishes the kubeconfig in ~5 min
 make kubeconfig    # merge the cluster into ~/.kube/config and switch to it
 kubectl get nodes
 ```
@@ -135,8 +137,8 @@ you change one in Terraform, change it in the Makefile or pass it on the
 command line.
 
 If it says the secret holds no kubeconfig yet, the secret still contains the
-placeholder: `make apply` did not finish, or the push step failed. Check
-the `kubeconfig_push` output from apply.
+placeholder: the instance is still installing k0s (wait a few minutes) or the
+last step of `/var/log/codespace-k0s.log` failed (`make ssh`, or an SSM session).
 
 ## Variables
 
@@ -166,5 +168,22 @@ the `kubeconfig_push` output from apply.
 - The Elastic IP is in the API certificate's SANs, so kubectl verifies TLS
   against it. If you replace the instance the certificate is regenerated;
   run `make kubeconfig` again.
-- Terraform state is local (`terraform.tfstate`); it holds secrets, so don't
-  commit it.
+- Terraform state holds secrets (DB password, kubeconfig secret value); keep
+  it private and never commit it.
+
+## Running in Terraform Cloud
+
+Runs on Terraform Cloud runners need no network access to the instance, since
+Terraform makes only AWS API calls. Set these on the workspace:
+
+- Working directory `stacks/codespace` (the stack uses `../../infra/tf-modules`,
+  so the whole repo must be available to the run)
+- AWS credentials: `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (sensitive
+  environment variables) or dynamic credentials
+- `SOPS_AGE_KEY`: contents of your age private key (sensitive environment
+  variable), so the sops provider can decrypt `secrets.yaml`
+- Terraform variable `allowed_cidrs`: your own IP(s), for SSH and the API
+
+`.env` and the `plan`/`apply` Makefile targets are for local runs
+(saved plans with `-out` are not supported by remote runs). `make kubeconfig`
+works either way, because it only talks to Secrets Manager.

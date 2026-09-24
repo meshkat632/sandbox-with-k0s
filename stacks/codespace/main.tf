@@ -40,9 +40,6 @@ locals {
   ssh_keys = [
     for k in nonsensitive(local.secrets.ssh_keys) : { for f, v in k : f => v if f != "private_key" }
   ]
-
-  # Sensitive - used only by the SSH connection in step 6
-  ssh_private_key = local.secrets.ssh_keys[0].private_key
 }
 
 # =============================================================================
@@ -125,6 +122,7 @@ resource "aws_security_group" "this" {
 # Step 3: IAM role + instance profile
 # Gives the instance (and its k0s pods) temporary AWS credentials:
 #   - SSM:     Session Manager shell + readiness check
+#   - secret:  write access to the kubeconfig secret
 #   - extras:  var.extra_policy_arns (EBS CSI volumes, ECR image pulls)
 # =============================================================================
 
@@ -151,6 +149,30 @@ resource "aws_iam_role_policy_attachment" "extra" {
 
   role       = aws_iam_role.this.name
   policy_arn = each.value
+}
+
+# The instance publishes its own kubeconfig to this secret at the end of
+# k0s.sh, so nothing outside AWS (e.g. a Terraform Cloud runner) ever has to
+# reach it over SSH. The module also creates the placeholder version, which must
+# exist before the instance boots (see depends_on on aws_instance.this).
+module "kubeconfig_secret" {
+  source = "../../infra/tf-modules/kubeconfig-secret"
+
+  secret_name = var.kubeconfig_secret_name
+}
+
+resource "aws_iam_role_policy" "kubeconfig_push" {
+  name = "kubeconfig-push"
+  role = aws_iam_role.this.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:PutSecretValue"]
+      Resource = module.kubeconfig_secret.secret_arn
+    }]
+  })
 }
 
 resource "aws_iam_instance_profile" "this" {
@@ -191,6 +213,8 @@ locals {
         name        = local.name
         k0s_version = var.k0s_version
         public_ip   = aws_eip.this.public_ip
+        region      = var.region
+        secret_id   = module.kubeconfig_secret.secret_name
       })
     },
   ]
@@ -240,6 +264,16 @@ resource "aws_instance" "this" {
 
   tags = { Name = local.name }
 
+  # Everything the boot scripts rely on must exist before the first boot:
+  # the instance role's permissions, and the secret's placeholder version
+  # (created later, it could overwrite the real kubeconfig).
+  depends_on = [
+    aws_iam_role_policy_attachment.ssm,
+    aws_iam_role_policy_attachment.extra,
+    aws_iam_role_policy.kubeconfig_push,
+    module.kubeconfig_secret,
+  ]
+
   lifecycle {
     ignore_changes = [ami] # don't replace the server when Canonical publishes a newer AMI
   }
@@ -248,108 +282,6 @@ resource "aws_instance" "this" {
 resource "aws_eip_association" "this" {
   instance_id   = aws_instance.this.id
   allocation_id = aws_eip.this.id
-}
-
-# =============================================================================
-# Step 6: wait until the instance is reachable and bootstrapped
-# =============================================================================
-
-resource "terraform_data" "instance_ready" {
-  # Re-run the checks whenever the instance is replaced
-  triggers_replace = [aws_instance.this.id]
-
-  # AWS side: EC2 status checks pass and the SSM agent is Online
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<-EOT
-      set -euo pipefail
-      ID=${aws_instance.this.id}
-      REGION=${var.region}
-
-      echo "Waiting for EC2 status checks on $ID ..."
-      aws ec2 wait instance-status-ok --instance-ids "$ID" --region "$REGION"
-
-      echo "Waiting for SSM agent to report Online ..."
-      for i in $(seq 1 30); do
-        STATUS=$(aws ssm describe-instance-information --region "$REGION" \
-          --filters "Key=InstanceIds,Values=$ID" \
-          --query "InstanceInformationList[0].PingStatus" --output text 2>/dev/null || true)
-        [ "$STATUS" = "Online" ] && { echo "SSM: Online"; exit 0; }
-        echo "  SSM status: $STATUS (attempt $i/30)"; sleep 10
-      done
-      echo "ERROR: SSM agent not Online after 5 minutes" >&2; exit 1
-    EOT
-  }
-
-  # Guest side: SSH works, cloud-init finished and every script succeeded
-  connection {
-    type        = "ssh"
-    host        = aws_eip.this.public_ip
-    user        = "ubuntu"
-    private_key = local.ssh_private_key
-    timeout     = "5m"
-  }
-
-  provisioner "remote-exec" {
-    inline = concat(
-      ["cloud-init status --wait > /dev/null || { sudo tail -n 40 /var/log/codespace-*.log; exit 1; }"],
-      [for s in local.cloud_init_scripts : "test -f /var/lib/codespace-${s.name}.done"],
-      [
-        "kubectl get nodes",
-        "echo \"ready: $(hostname) - $(lsb_release -ds)\"",
-      ],
-    )
-  }
-
-  depends_on = [
-    aws_iam_role_policy_attachment.ssm,
-    aws_iam_role_policy_attachment.extra,
-    aws_eip_association.this,
-  ]
-}
-
-# =============================================================================
-# Step 7: publish the kubeconfig to Secrets Manager
-# Reads ~/.kube/config from the instance over SSH (server address is the
-# Elastic IP, which is already an API cert SAN) and stores it in the secret,
-# so `make kubeconfig` needs only AWS access - no SSH key. Re-runs whenever
-# the instance or the secret is replaced.
-# =============================================================================
-
-module "kubeconfig_secret" {
-  source = "../../infra/tf-modules/kubeconfig-secret"
-
-  secret_name = var.kubeconfig_secret_name
-}
-
-resource "terraform_data" "kubeconfig_push" {
-  triggers_replace = [aws_instance.this.id, module.kubeconfig_secret.secret_arn]
-
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    environment = {
-      SSH_PRIVATE_KEY = local.ssh_private_key
-      HOST            = aws_eip.this.public_ip
-      SECRET_ID       = module.kubeconfig_secret.secret_arn
-      AWS_REGION      = var.region
-    }
-    command = <<-EOT
-      set -euo pipefail
-      KEY=$(mktemp); trap 'rm -f "$KEY"' EXIT
-      printf '%s\n' "$SSH_PRIVATE_KEY" > "$KEY"
-
-      CFG=$(ssh -i "$KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-        -o LogLevel=ERROR "ubuntu@$HOST" cat .kube/config)
-      CFG=$(printf '%s\n' "$CFG" | sed -E "s#https://[^:]+:6443#https://$HOST:6443#")
-
-      aws secretsmanager put-secret-value --secret-id "$SECRET_ID" \
-        --secret-string "$CFG" > /dev/null
-      echo "kubeconfig pushed to $SECRET_ID"
-    EOT
-  }
-
-  # the placeholder version must exist first, or it could overwrite the real one
-  depends_on = [terraform_data.instance_ready, module.kubeconfig_secret]
 }
 
 # =============================================================================
@@ -373,8 +305,7 @@ output "ssh_command" {
 }
 
 output "kubeconfig_secret_name" {
-  value      = module.kubeconfig_secret.secret_name
-  depends_on = [terraform_data.kubeconfig_push]
+  value = module.kubeconfig_secret.secret_name
 }
 
 output "ssm_command" {

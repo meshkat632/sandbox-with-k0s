@@ -86,5 +86,33 @@ exec k0s kubectl "$@"
 EOF
 chmod 755 /usr/local/bin/kubectl
 
+# --- 6. Publish the kubeconfig to Secrets Manager -----------------------------
+# Lets `make kubeconfig` fetch it with AWS access alone (no SSH). Uses the
+# instance role (secretsmanager:PutSecretValue on this one secret). The API
+# server address is rewritten to the public IP, which is an API cert SAN.
+SECRET_ID="${secret_id}"
+AWS_REGION="${region}"
+KUBECONFIG_CONTENT=$(k0s kubeconfig admin)
+if [ -n "$PUBLIC_IP" ]; then
+  KUBECONFIG_CONTENT=$(printf '%s\n' "$KUBECONFIG_CONTENT" | sed -E "s#https://[^:]+:6443#https://$PUBLIC_IP:6443#")
+fi
+export SECRET_ID AWS_REGION KUBECONFIG_CONTENT
+for i in $(seq 1 10); do
+  if python3 - <<'EOF'
+import os, boto3
+boto3.client("secretsmanager", region_name=os.environ["AWS_REGION"]).put_secret_value(
+    SecretId=os.environ["SECRET_ID"], SecretString=os.environ["KUBECONFIG_CONTENT"] + "\n")
+EOF
+  then
+    echo "kubeconfig published to secret $SECRET_ID"
+    break
+  fi
+  if [ "$i" -eq 10 ]; then
+    echo "ERROR: could not write the kubeconfig to secret $SECRET_ID" >&2
+    exit 1
+  fi
+  echo "  publish failed (attempt $i/10), retrying ..."; sleep 6
+done
+
 k0s kubectl get nodes -o wide
 echo "=== k0s install done: $(date -Is) ==="
