@@ -1,20 +1,4 @@
 # =============================================================================
-# Provider
-# =============================================================================
-
-provider "aws" {
-  region = var.region
-
-  default_tags {
-    tags = {
-      Project     = "codespace"
-      Environment = "dev"
-      ManagedBy   = "terraform"
-    }
-  }
-}
-
-# =============================================================================
 # Secrets & naming
 # =============================================================================
 
@@ -31,14 +15,9 @@ locals {
   suffix = coalesce(var.name_suffix, one(random_id.uuid[*].hex))
   name   = "codespace-${local.suffix}" # e.g. codespace-a3f9c1
 
-  secrets = yamldecode(data.sops_file.secrets.raw) # whole file (sensitive)
-
-  db_username = nonsensitive(local.secrets.db.username)
-  db_password = local.secrets.db.password # sensitive
-
   # Public key data only - private_key stripped out
   ssh_keys = [
-    for k in nonsensitive(local.secrets.ssh_keys) : { for f, v in k : f => v if f != "private_key" }
+    for k in nonsensitive(yamldecode(data.sops_file.secrets.raw).ssh_keys) : { for f, v in k : f => v if f != "private_key" }
   ]
 }
 
@@ -47,19 +26,30 @@ locals {
 # =============================================================================
 
 data "aws_vpc" "default" {
+  count   = var.subnet_id == null ? 1 : 0
   default = true
 }
 
 data "aws_subnets" "default" {
+  count = var.subnet_id == null ? 1 : 0
+
   filter {
     name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
+    values = [data.aws_vpc.default[0].id]
   }
 
   filter {
     name   = "default-for-az"
     values = ["true"]
   }
+}
+
+data "aws_subnet" "this" {
+  id = coalesce(var.subnet_id, try(sort(data.aws_subnets.default[0].ids)[0], null))
+}
+
+data "aws_ec2_instance_type" "this" {
+  instance_type = var.instance_type
 }
 
 data "aws_ami" "ubuntu" {
@@ -84,12 +74,19 @@ data "aws_ami" "ubuntu" {
 resource "aws_key_pair" "this" {
   key_name   = local.name
   public_key = local.ssh_keys[0].public_key
+
+  lifecycle {
+    precondition {
+      condition     = can(regex("^ssh-", local.ssh_keys[0].public_key))
+      error_message = "secrets.yaml must list at least one ssh_keys entry with an OpenSSH public_key."
+    }
+  }
 }
 
 resource "aws_security_group" "this" {
   name        = "${local.name}-sg"
   description = "SSH access to ${local.name}"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = data.aws_subnet.this.vpc_id
 
   ingress {
     description = "SSH"
@@ -158,7 +155,8 @@ resource "aws_iam_role_policy_attachment" "extra" {
 module "kubeconfig_secret" {
   source = "../../infra/tf-modules/kubeconfig-secret"
 
-  secret_name = var.kubeconfig_secret_name
+  secret_name             = var.kubeconfig_secret_name
+  recovery_window_in_days = var.kubeconfig_recovery_window_in_days
 }
 
 resource "aws_iam_role_policy" "kubeconfig_push" {
@@ -240,7 +238,7 @@ locals {
 resource "aws_instance" "this" {
   ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.instance_type
-  subnet_id                   = sort(data.aws_subnets.default.ids)[0]
+  subnet_id                   = data.aws_subnet.this.id
   vpc_security_group_ids      = [aws_security_group.this.id]
   key_name                    = aws_key_pair.this.key_name
   iam_instance_profile        = aws_iam_instance_profile.this.name
@@ -276,50 +274,15 @@ resource "aws_instance" "this" {
 
   lifecycle {
     ignore_changes = [ami] # don't replace the server when Canonical publishes a newer AMI
+
+    precondition {
+      condition     = contains(data.aws_ec2_instance_type.this.supported_architectures, "x86_64")
+      error_message = "instance_type ${var.instance_type} does not support x86_64; the AMI and k0s binary are amd64."
+    }
   }
 }
 
 resource "aws_eip_association" "this" {
   instance_id   = aws_instance.this.id
   allocation_id = aws_eip.this.id
-}
-
-# =============================================================================
-# Outputs
-# =============================================================================
-
-output "instance_id" {
-  value = aws_instance.this.id
-}
-
-output "region" {
-  value = var.region
-}
-
-output "public_ip" {
-  value = aws_eip.this.public_ip
-}
-
-output "ssh_command" {
-  value = "ssh ubuntu@${aws_eip.this.public_ip}"
-}
-
-output "kubeconfig_secret_name" {
-  value = module.kubeconfig_secret.secret_name
-}
-
-output "ssm_command" {
-  value = "aws ssm start-session --target ${aws_instance.this.id}"
-}
-
-output "debug" {
-  value = {
-    name        = local.name
-    vpc_id      = data.aws_vpc.default.id
-    ami_name    = data.aws_ami.ubuntu.name
-    db_username = local.db_username
-    db_password = "${substr(nonsensitive(local.db_password), 0, 2)}****" # masked
-    db_pw_len   = nonsensitive(length(local.db_password))
-    ssh_keys    = [for k in local.ssh_keys : k.name]
-  }
 }

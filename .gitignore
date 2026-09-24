@@ -13,6 +13,8 @@ override.tf.json
 .terraformrc
 terraform.rc
 .terraform.lock.hcl
+# Stacks commit their lock file so local and Terraform Cloud runs use the same provider builds
+!/stacks/*/.terraform.lock.hcl
 
 # Environment variables
 .env

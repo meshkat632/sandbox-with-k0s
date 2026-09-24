@@ -26,7 +26,9 @@ RUN      := $(LOAD_ENV) && $(TF)
 # Instance id + region from terraform outputs, for the aws CLI targets
 EC2 := ID=$$($(RUN) output -raw instance_id) && R=$$($(RUN) output -raw region) && $(LOAD_ENV)
 
-.PHONY: help env init fmt validate plan apply destroy output clean decrypt encrypt ssh kubeconfig status stop start
+.DEFAULT_GOAL := help
+
+.PHONY: help env init fmt lint validate plan apply destroy output clean decrypt encrypt ssh kubeconfig status stop start
 
 help: ## Show available targets
 	@grep -E '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -39,6 +41,11 @@ init: env ## Download providers/modules
 
 fmt: ## Format all .tf files
 	$(TF) fmt -recursive
+
+lint: ## Check formatting and validate without credentials or a backend (CI-safe)
+	$(TF) fmt -recursive -check -diff
+	$(TF) init -backend=false -input=false > /dev/null
+	$(TF) validate
 
 validate: init ## Check syntax and config
 	$(RUN) validate

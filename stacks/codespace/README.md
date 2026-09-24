@@ -6,7 +6,8 @@ worker, has a fixed Elastic IP, and is provisioned by cloud-init.
 
 ## What it creates
 
-- EC2 instance (default `r7i.2xlarge`, 100 GiB encrypted gp3) in the default VPC
+- EC2 instance (default `r7i.2xlarge`, 100 GiB encrypted gp3) in `subnet_id`, or
+  the default VPC if unset
 - Elastic IP, so the address survives stop/start
 - Key pair (public key from `secrets.yaml`), security group (SSH `22` and
   Kubernetes API `6443`, both limited to `allowed_cidrs`)
@@ -18,7 +19,9 @@ On first boot cloud-init runs, in order:
 
 1. `scripts/bootstrap.sh.tftpl`: base packages, a Python venv with
    `python_packages`, `~/workspace`
-2. `scripts/k0s.sh.tftpl`: installs k0s as a single-node controller, adds the
+2. `scripts/k0s.sh.tftpl`: downloads the pinned `k0s_version` from GitHub,
+   verifies it against the release's `sha256sums.txt`, installs it as a
+   single-node controller, adds the
    Elastic IP to the API certificate, and sets up `kubectl` for `ubuntu`
 
 As its last step, `k0s.sh` writes the admin kubeconfig to the Secrets Manager
@@ -106,6 +109,7 @@ Run `make help` for all targets.
 | ------------ | --------------------------------------------------------- |
 | `init`       | Download providers/modules                                |
 | `fmt`        | Format all `.tf` files                                    |
+| `lint`       | `fmt -check` + `validate`, no credentials needed (CI-safe) |
 | `validate`   | Check syntax and configuration                            |
 | `plan`       | Create an execution plan (`VARS="-var name_suffix=demo01"` for extra args) |
 | `apply`      | Apply the saved plan                                      |
@@ -146,29 +150,41 @@ last step of `/var/log/codespace-k0s.log` failed (`make ssh`, or an SSM session)
 | ------------------------ | ------------------------ | -------------------------------------------------- |
 | `allowed_cidrs`          | (required)               | CIDRs allowed to reach SSH and the API server      |
 | `region`                 | `eu-central-1`           | AWS region                                         |
+| `tags`                   | Project, Environment, ManagedBy | Default tags on every resource              |
+| `subnet_id`              | `null` (default VPC)     | Subnet for the instance                            |
 | `name_suffix`            | random 6-char hex        | Fixed suffix for resource names (`codespace-<suffix>`) |
 | `instance_type`          | `r7i.2xlarge`            | EC2 instance type (x86_64)                         |
 | `root_volume_size`       | `100`                    | Root volume, GiB                                   |
 | `python_packages`        | numpy, pandas, requests, ruff, pytest | Installed into `~/.venvs/dev`         |
-| `k0s_version`            | `""` (latest stable)     | e.g. `v1.33.4+k0s.0`                               |
+| `k0s_version`            | `v1.36.4+k0s.1`          | k0s release tag; pinned for reproducible rebuilds  |
 | `extra_policy_arns`      | EBS CSI, ECR pull        | Managed policies added to the instance role        |
 | `kubeconfig_secret_name` | `codespace-kubeconfig`   | Secrets Manager secret for the kubeconfig          |
+| `kubeconfig_recovery_window_in_days` | `0`          | Days the secret is recoverable after destroy (0 or 7-30) |
+
+Inputs are validated at plan time: `allowed_cidrs` must not contain
+`0.0.0.0/0`, `instance_type` must support x86_64, and `python_packages`
+entries must be plain pip requirements (they end up in a shell script).
 
 ## Outputs
 
-`instance_id`, `region`, `public_ip`, `ssh_command`, `ssm_command`,
-`kubeconfig_secret_name`, `debug`.
+`name`, `instance_id`, `region`, `public_ip`, `ami_name`,
+`security_group_id`, `kubeconfig_secret_name`, `ssh_command`, `ssm_command`.
 
 ## Notes
 
 - Access without SSH: `aws ssm start-session --target <instance_id>`
   (see the `ssm_command` output).
-- The kubeconfig secret has no recovery window, so `make destroy` deletes it
-  immediately.
+- By default the kubeconfig secret has no recovery window, so `make destroy`
+  deletes it immediately (see `kubeconfig_recovery_window_in_days`).
+- To upgrade k0s, bump `k0s_version`. This replaces the instance, and with
+  it the cluster; it is not an in-place upgrade.
+- `.terraform.lock.hcl` is committed so local and Terraform Cloud runs use the
+  same provider builds. After changing provider versions run `make init` and
+  commit the updated lock file.
 - The Elastic IP is in the API certificate's SANs, so kubectl verifies TLS
   against it. If you replace the instance the certificate is regenerated;
   run `make kubeconfig` again.
-- Terraform state holds secrets (DB password, kubeconfig secret value); keep
+- Terraform state holds secrets (the decrypted `secrets.yaml`); keep
   it private and never commit it.
 
 ## Running in Terraform Cloud

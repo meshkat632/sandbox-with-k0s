@@ -4,47 +4,67 @@
 # Safe to re-run by hand: sudo /opt/codespace/k0s.sh
 set -euo pipefail
 exec > >(tee -a /var/log/codespace-k0s.log) 2>&1
+trap 'echo "ERROR: k0s install failed at line $LINENO: $BASH_COMMAND" >&2' ERR
 
 echo "=== k0s install start: $(date -Is) ==="
 
-K0S_VERSION="${k0s_version}" # empty = latest stable
+K0S_VERSION="${k0s_version}"
 DEV_USER="ubuntu"
 HOME_DIR="/home/$DEV_USER"
+CURL=(curl -fsSL --retry 5 --retry-connrefused --connect-timeout 10)
 
-# --- 1. Install the k0s binary -------------------------------------------------
+# --- 1. Install the k0s binary, verified against the release checksums -------
 if ! command -v k0s > /dev/null; then
-  if [ -n "$K0S_VERSION" ]; then export K0S_VERSION; else unset K0S_VERSION; fi
-  curl -sSfL https://get.k0s.sh | sh
+  RELEASE_URL="https://github.com/k0sproject/k0s/releases/download/$K0S_VERSION"
+  ASSET="k0s-$K0S_VERSION-amd64"
+  TMP=$(mktemp -d)
+  "$${CURL[@]}" -o "$TMP/$ASSET" "$RELEASE_URL/$ASSET"
+  "$${CURL[@]}" -o "$TMP/sha256sums.txt" "$RELEASE_URL/sha256sums.txt"
+  SUM=$(awk -v f="*$ASSET" '$2 == f { print $1 }' "$TMP/sha256sums.txt")
+  if [ -z "$SUM" ]; then
+    echo "ERROR: no checksum for $ASSET in sha256sums.txt" >&2
+    exit 1
+  fi
+  echo "$SUM  $TMP/$ASSET" | sha256sum -c -
+  install -m 755 "$TMP/$ASSET" /usr/local/bin/k0s
+  rm -rf "$TMP"
 fi
-k0s version
+INSTALLED=$(k0s version)
+if [ "$INSTALLED" != "$K0S_VERSION" ]; then
+  echo "WARNING: k0s $INSTALLED is installed, expected $K0S_VERSION" >&2
+fi
 
 # --- 2. Config: add the public IP to the API server certificate ---------------
 # So kubectl from your laptop can talk to https://<public-ip>:6443.
 # Terraform passes the Elastic IP; fall back to instance metadata if empty.
 PUBLIC_IP="${public_ip}"
 if [ -z "$PUBLIC_IP" ]; then
-  TOKEN=$(curl -sS -X PUT http://169.254.169.254/latest/api/token \
+  TOKEN=$("$${CURL[@]}" -X PUT http://169.254.169.254/latest/api/token \
     -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
-  PUBLIC_IP=$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \
+  PUBLIC_IP=$("$${CURL[@]}" -H "X-aws-ec2-metadata-token: $TOKEN" \
     http://169.254.169.254/latest/meta-data/public-ipv4 || true)
 fi
-echo "public IP: $PUBLIC_IP"
+echo "public IP: $${PUBLIC_IP:-none}"
 
-mkdir -p /etc/k0s
+install -d -m 755 /etc/k0s
 if [ ! -f /etc/k0s/k0s.yaml ]; then
-  k0s config create > /etc/k0s/k0s.yaml
-  PUBLIC_IP="$PUBLIC_IP" python3 - <<'EOF'
-import os, yaml
-path = "/etc/k0s/k0s.yaml"
+  k0s config create > /etc/k0s/k0s.yaml.tmp
+  PUBLIC_IP="$PUBLIC_IP" python3 - /etc/k0s/k0s.yaml.tmp <<'EOF'
+import os, sys, yaml
+path = sys.argv[1]
 ip = os.environ.get("PUBLIC_IP", "").strip()
-cfg = yaml.safe_load(open(path))
+with open(path) as f:
+    cfg = yaml.safe_load(f)
 if ip:
-    sans = cfg["spec"]["api"].setdefault("sans", []) or []
+    api = cfg["spec"]["api"]
+    sans = api.get("sans") or []
     if ip not in sans:
         sans.append(ip)
-    cfg["spec"]["api"]["sans"] = sans
-yaml.safe_dump(cfg, open(path, "w"), default_flow_style=False, sort_keys=False)
+    api["sans"] = sans
+with open(path, "w") as f:
+    yaml.safe_dump(cfg, f, default_flow_style=False, sort_keys=False)
 EOF
+  mv /etc/k0s/k0s.yaml.tmp /etc/k0s/k0s.yaml
 fi
 
 # --- 3. Install and start the single-node controller --------------------------
@@ -57,7 +77,7 @@ systemctl enable --now k0scontroller
 # --- 4. Wait until the node is Ready -------------------------------------------
 echo "Waiting for the node to become Ready ..."
 for i in $(seq 1 60); do
-  if k0s kubectl get nodes 2> /dev/null | grep -q " Ready"; then
+  if k0s kubectl get nodes --no-headers 2> /dev/null | awk '{ print $2 }' | grep -qx Ready; then
     echo "node Ready after ~$((i * 5))s"
     break
   fi
@@ -71,9 +91,8 @@ done
 
 # --- 5. kubectl for the ubuntu user -------------------------------------------
 install -d -m 700 -o "$DEV_USER" -g "$DEV_USER" "$HOME_DIR/.kube"
-k0s kubeconfig admin > "$HOME_DIR/.kube/config"
+(umask 077 && k0s kubeconfig admin > "$HOME_DIR/.kube/config")
 chown "$DEV_USER:$DEV_USER" "$HOME_DIR/.kube/config"
-chmod 600 "$HOME_DIR/.kube/config"
 
 # k0s kubectl falls back to the root-only /var/lib/k0s/pki/admin.conf when
 # KUBECONFIG is unset, so point it at the user's own kubeconfig.
@@ -111,8 +130,10 @@ EOF
     echo "ERROR: could not write the kubeconfig to secret $SECRET_ID" >&2
     exit 1
   fi
-  echo "  publish failed (attempt $i/10), retrying ..."; sleep 6
+  echo "  publish failed (attempt $i/10), retrying ..."
+  sleep 6
 done
+unset KUBECONFIG_CONTENT
 
 k0s kubectl get nodes -o wide
 echo "=== k0s install done: $(date -Is) ==="
