@@ -118,6 +118,7 @@ Run `make help` for all targets.
 | `decrypt` / `encrypt` | Decrypt / encrypt `secrets.yaml` with SOPS       |
 | `ssh`        | SSH into the instance                                     |
 | `kubeconfig` | Fetch the kubeconfig from Secrets Manager and select it   |
+| `deploy`     | Apply a manifest through SSM (`MANIFEST=`, `NAMESPACE=`, `DRY_RUN=1`) |
 | `status`     | Show instance state and IP                                |
 | `stop`       | Stop the instance (disk, Elastic IP and state are kept)   |
 | `start`      | Start the instance and wait for SSH and Kubernetes        |
@@ -144,6 +145,65 @@ If it says the secret holds no kubeconfig yet, the secret still contains the
 placeholder: the instance is still installing k0s (wait a few minutes) or the
 last step of `/var/log/codespace-k0s.log` failed (`make ssh`, or an SSM session).
 
+## Uploading files to the instance
+
+Anything you put in `files/` (`upload_dir`) is copied to
+`/opt/codespace/files` (`upload_destination`) on the instance, mode `755`,
+owned by root, keeping subfolders. Hidden files and folders are skipped.
+
+```sh
+cp my-script.sh files/
+make plan && make apply       # or push, for Terraform Cloud
+make ssh                      # then: /opt/codespace/files/my-script.sh
+```
+
+How it works (`upload.tf`): the files are embedded, base64-encoded, in an
+SSM command document, and an SSM association runs it on the instance. Like
+the rest of the stack this is AWS API calls only, so it works from Terraform
+Cloud. Changing the files creates a new document version and re-runs the
+association; unlike the boot scripts, it does **not** replace the instance.
+A replaced instance gets the files too.
+
+- The destination is a mirror: files you delete from `files/` are removed
+  from the instance. The upload is staged and swapped in, so the directory is
+  never half-written.
+- An SSM document is limited to 64 KB, so keep it to scripts and small config
+  files (about 45 KB in total). The plan fails with a message if it's larger.
+- File names may only contain letters, digits and `._-/`.
+- `apply` waits (up to 10 minutes) for the upload to succeed, so the instance
+  must be running. After a `make stop`, run `make start` before applying.
+- The credentials running Terraform need SSM document and association
+  permissions (`ssm:CreateDocument`, `ssm:UpdateDocument`,
+  `ssm:CreateAssociation`, `ssm:UpdateAssociation`,
+  `ssm:DescribeAssociation`, and their delete/read counterparts).
+
+## Deploying manifests through SSM
+
+`make deploy` applies Kubernetes manifests without reaching the API server or
+SSH. `scripts/ssm_kubectl_apply.py` sends the manifest to the instance with
+SSM Run Command (gzipped and base64-encoded inside the command) and runs
+`k0s kubectl apply` there as root. It only needs AWS credentials with
+`ssm:SendCommand`, `ssm:GetCommandInvocation` and `ec2:DescribeInstances`.
+
+```sh
+make deploy MANIFEST=app.yaml                  # a file
+make deploy MANIFEST=manifests/ NAMESPACE=apps # every *.yaml / *.yml in a directory, sorted
+make deploy MANIFEST=app.yaml DRY_RUN=1        # server-side dry run, changes nothing
+```
+
+The first run creates a virtualenv with boto3 in `<repo>/.venv`. The script
+can also be run directly and reads stdin with `-`:
+
+```sh
+kubectl create deploy web --image=nginx -o yaml --dry-run=client \
+  | ../../.venv/bin/python ../../scripts/ssm_kubectl_apply.py -n apps -
+```
+
+It finds the running instance tagged `Project=codespace` (or pass
+`--instance-id`) and exits with kubectl's exit code. Limits: the compressed
+manifest must be under 48 KiB (several hundred KiB of plain YAML), and SSM
+keeps only the first 24,000 characters of kubectl's output.
+
 ## Variables
 
 | Variable                 | Default                  | Description                                        |
@@ -160,6 +220,8 @@ last step of `/var/log/codespace-k0s.log` failed (`make ssh`, or an SSM session)
 | `extra_policy_arns`      | EBS CSI, ECR pull        | Managed policies added to the instance role        |
 | `kubeconfig_secret_name` | `codespace-kubeconfig`   | Secrets Manager secret for the kubeconfig          |
 | `kubeconfig_recovery_window_in_days` | `0`          | Days the secret is recoverable after destroy (0 or 7-30) |
+| `upload_dir`             | `files`                  | Folder mirrored to the instance through SSM        |
+| `upload_destination`     | `/opt/codespace/files`   | Where it is mirrored on the instance               |
 
 Inputs are validated at plan time: `allowed_cidrs` must not contain
 `0.0.0.0/0`, `instance_type` must support x86_64, and `python_packages`
@@ -168,7 +230,8 @@ entries must be plain pip requirements (they end up in a shell script).
 ## Outputs
 
 `name`, `instance_id`, `region`, `public_ip`, `ami_name`,
-`security_group_id`, `kubeconfig_secret_name`, `ssh_command`, `ssm_command`.
+`security_group_id`, `kubeconfig_secret_name`, `ssh_command`, `ssm_command`,
+`uploaded_files`.
 
 ## Notes
 

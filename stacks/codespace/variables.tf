@@ -132,3 +132,20 @@ variable "kubeconfig_recovery_window_in_days" {
     error_message = "kubeconfig_recovery_window_in_days must be 0 or between 7 and 30."
   }
 }
+
+variable "upload_dir" {
+  description = "Folder, relative to this stack, whose files are copied to upload_destination on the instance through SSM. Hidden files are skipped; an empty folder uploads nothing."
+  type        = string
+  default     = "files"
+}
+
+variable "upload_destination" {
+  description = "Directory on the instance that mirrors upload_dir. Managed entirely by Terraform: files not in upload_dir are removed."
+  type        = string
+  default     = "/opt/codespace/files"
+
+  validation {
+    condition     = can(regex("^/[A-Za-z0-9._/-]+[A-Za-z0-9._-]$", var.upload_destination)) && !contains(["/", "/opt", "/opt/codespace", "/etc", "/usr", "/home", "/root", "/var"], trimsuffix(var.upload_destination, "/"))
+    error_message = "upload_destination must be an absolute path of letters, digits and ._-/ and not a system directory such as /opt/codespace or /etc."
+  }
+}

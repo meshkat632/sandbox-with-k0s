@@ -286,3 +286,7 @@ resource "aws_eip_association" "this" {
   instance_id   = aws_instance.this.id
   allocation_id = aws_eip.this.id
 }
+
+
+
+# how can I add a resource that would upload a folder full of script into the the instance

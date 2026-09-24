@@ -42,3 +42,8 @@ output "ssm_command" {
   description = "Open a Session Manager shell on the instance, without SSH."
   value       = "aws ssm start-session --region ${var.region} --target ${aws_instance.this.id}"
 }
+
+output "uploaded_files" {
+  description = "Files from upload_dir mirrored to upload_destination on the instance."
+  value       = [for f in local.upload_files : "${var.upload_destination}/${f}"]
+}

@@ -19,6 +19,10 @@ KUBE_CONTEXT ?= codespace
 KUBECONFIG_SECRET ?= codespace-kubeconfig
 REGION            ?= eu-central-1
 
+# Python virtualenv for scripts/ssm_kubectl_apply.py (created on first use)
+VENV   := $(REPO_ROOT)/.venv
+DEPLOY := $(VENV)/bin/python $(REPO_ROOT)/scripts/ssm_kubectl_apply.py
+
 # Every recipe line runs in a fresh shell, so source the env file (auto-export) per command
 LOAD_ENV := set -a && . ./$(ENV_FILE) && set +a
 RUN      := $(LOAD_ENV) && $(TF)
@@ -28,7 +32,7 @@ EC2 := ID=$$($(RUN) output -raw instance_id) && R=$$($(RUN) output -raw region) 
 
 .DEFAULT_GOAL := help
 
-.PHONY: help env init fmt lint validate plan apply destroy output clean decrypt encrypt ssh kubeconfig status stop start
+.PHONY: help env init fmt lint validate plan apply destroy output clean decrypt encrypt ssh kubeconfig deploy status stop start
 
 help: ## Show available targets
 	@grep -E '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -95,6 +99,16 @@ kubeconfig: ## Fetch kubeconfig from Secrets Manager and make it the current con
 	kubectl config use-context $(KUBE_CONTEXT); \
 	kubectl get nodes --request-timeout=10s || \
 	  { echo "API not reachable at $$SERVER - is port 6443 open in the security group?"; exit 1; }
+
+# Stamp file, not bin/python: that is a symlink to the system interpreter
+$(VENV)/.installed: $(REPO_ROOT)/scripts/requirements.txt
+	python3 -m venv $(VENV)
+	$(VENV)/bin/pip install -q -r $<
+	@touch $@
+
+deploy: env $(VENV)/.installed ## Apply MANIFEST (file or dir) through SSM, no SSH/6443 needed; NAMESPACE=, DRY_RUN=1
+	@test -n "$(MANIFEST)" || { echo "usage: make deploy MANIFEST=path.yaml [NAMESPACE=apps] [DRY_RUN=1]"; exit 1; }
+	@$(LOAD_ENV) && $(DEPLOY) --region $(REGION) $(if $(NAMESPACE),--namespace $(NAMESPACE)) $(if $(DRY_RUN),--dry-run) $(MANIFEST)
 
 status: env ## Show instance state and IP
 	@$(EC2) && aws ec2 describe-instances --region $$R --instance-ids $$ID \
