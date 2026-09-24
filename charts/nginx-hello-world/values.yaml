@@ -1,0 +1,44 @@
+replicaCount: 1
+
+image:
+  # Unprivileged build: runs as a non-root user and listens on 8080
+  repository: nginxinc/nginx-unprivileged
+  tag: ""  # defaults to "<appVersion>-alpine"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Content of the served index.html
+page:
+  title: Hello from codespace
+  message: Served by nginx on the codespace k0s cluster.
+
+podAnnotations: {}
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  # Empty host matches every hostname
+  host: ""
+  path: /
+  pathType: Prefix
+  tls: []
+  #  - secretName: hello-tls
+  #    hosts: [hello.example.com]
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    memory: 64Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

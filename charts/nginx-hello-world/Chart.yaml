@@ -1,0 +1,6 @@
+apiVersion: v2
+name: nginx-hello-world
+description: A static "Hello, world!" page served by nginx, optionally behind an Ingress.
+type: application
+version: 0.1.0
+appVersion: "1.29"
