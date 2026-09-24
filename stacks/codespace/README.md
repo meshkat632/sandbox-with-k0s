@@ -192,8 +192,7 @@ entries must be plain pip requirements (they end up in a shell script).
 Runs on Terraform Cloud runners need no network access to the instance, since
 Terraform makes only AWS API calls. Set these on the workspace:
 
-- Working directory `stacks/codespace` (the stack uses `../../infra/tf-modules`,
-  so the whole repo must be available to the run)
+- Working directory `stacks/codespace`
 - AWS credentials: `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (sensitive
   environment variables) or dynamic credentials
 - `SOPS_AGE_KEY`: contents of your age private key (sensitive environment

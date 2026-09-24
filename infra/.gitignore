@@ -1,8 +1,0 @@
-__pycache__/
-*.pyc
-.terraform/
-*.tfstate
-*.tfstate.*
-.terraform.lock.hcl
-terraform.tfvars
-*.auto.tfvars

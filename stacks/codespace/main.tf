@@ -153,7 +153,7 @@ resource "aws_iam_role_policy_attachment" "extra" {
 # reach it over SSH. The module also creates the placeholder version, which must
 # exist before the instance boots (see depends_on on aws_instance.this).
 module "kubeconfig_secret" {
-  source = "../../infra/tf-modules/kubeconfig-secret"
+  source = "./modules/kubeconfig-secret"
 
   secret_name             = var.kubeconfig_secret_name
   recovery_window_in_days = var.kubeconfig_recovery_window_in_days

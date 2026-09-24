@@ -7,7 +7,7 @@ output "secret_name" {
 }
 
 output "kubeconfig" {
-  description = "Current content of the secret — the placeholder until scripts/get_kubeconfig.sh pushes the real kubeconfig"
+  description = "Current content of the secret — the placeholder until the instance publishes the real kubeconfig"
   value       = data.aws_secretsmanager_secret_version.current.secret_string
   sensitive   = true
 }
