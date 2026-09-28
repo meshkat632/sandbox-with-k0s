@@ -1,0 +1,5 @@
+apiVersion: v2
+name: gateway
+description: A shared Gateway API Gateway with one HTTPS listener per hostname, certificates from cert-manager, and an HTTP to HTTPS redirect.
+type: application
+version: 0.2.0

@@ -1,0 +1,11 @@
+# Plain configuration -> ConfigMap
+config:
+  APP_ENV: "production"
+  LOG_LEVEL: "info"
+
+# Sensitive values -> Secret (base64-encoded automatically by the template)
+# Don't commit real secrets here; pass them at install time instead, e.g.
+#   --set secrets.DB_PASSWORD=... or -f secrets.values.yaml (kept out of git)
+secrets:
+  DB_USER: "app"
+  DB_PASSWORD: "changeme"

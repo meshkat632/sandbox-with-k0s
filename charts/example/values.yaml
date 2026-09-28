@@ -1,0 +1,25 @@
+# Gateway name; routes attach to it with parentRefs name/namespace
+name: public
+gatewayClassName: traefik
+
+# Listener ports. With Traefik they must match its entry point ports
+# (web / websecure), not the ports clients connect to.
+httpPort: 8000
+httpsPort: 8443
+
+# ClusterIssuer cert-manager uses for the HTTPS listeners' certificates.
+# Empty: no annotation, the <key>-tls secrets must be provided some other way.
+clusterIssuer: ""
+
+# Namespaces whose HTTPRoutes may attach to the HTTPS listeners
+routeNamespaces: []
+
+# One HTTPS listener per entry: <key>: <hostname>. The listener is named
+# https-<key> (use it as the route's sectionName) and serves the
+# certificate in secret <key>-tls, in the Gateway's namespace.
+hosts: {}
+
+# Redirect every plain HTTP request to HTTPS. ACME HTTP-01 challenges still
+# work: cert-manager's solver routes match their exact path, which takes
+# precedence over this route's "/" prefix.
+redirectToHTTPS: true
