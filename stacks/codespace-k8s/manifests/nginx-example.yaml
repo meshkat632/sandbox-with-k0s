@@ -42,10 +42,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - hello-world.nginx.3-127-121-145.sslip.io
-      secretName: hello-world-tls
+        - example.nginx.3-127-121-145.sslip.io
+      secretName: example-tls
   rules:
-    - host: hello-world.nginx.3-127-121-145.sslip.io
+    - host: example.nginx.3-127-121-145.sslip.io
       http:
         paths:
           - path: /
