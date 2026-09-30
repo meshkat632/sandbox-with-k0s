@@ -305,3 +305,13 @@ resource "helm_release" "nginx_hello_world" {
 
   depends_on = [helm_release.gateway]
 }
+
+
+###########################################################################
+
+module "hello_nginx" {
+  source        = "./modules/k8s-manifests"
+  manifests_dir = "${path.module}/manifests"
+
+  depends_on = [helm_release.ingress_nginx]
+}
