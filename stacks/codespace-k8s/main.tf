@@ -119,7 +119,7 @@ resource "helm_release" "traefik" {
       providers = {
         kubernetesGateway = {
           enabled = true
-          experimentalChannel = true
+          experimentalChannel = false
           statusAddress = {
             ip      = local.public_host
             service = { enabled = false }
