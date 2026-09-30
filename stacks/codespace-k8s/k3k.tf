@@ -34,6 +34,6 @@ resource "helm_release" "k3k" {
   # Uninstalling the chart removes its CRDs, and with them every virtual
   # cluster of every customer. Destroying it has to be a deliberate edit.
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
