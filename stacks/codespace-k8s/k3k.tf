@@ -11,14 +11,6 @@ variable "k3k_chart_version" {
   default     = "1.2.0"
 }
 
-# The release was first installed by hand (helm install k3k k3k/k3k -n k3k-system);
-# this adopts it into state instead of installing a second one. Harmless once
-# imported, can be removed after the first successful apply.
-import {
-  to = helm_release.k3k
-  id = "k3k-system/k3k"
-}
-
 resource "helm_release" "k3k" {
   name             = "k3k"
   repository       = "https://rancher.github.io/k3k"
@@ -34,6 +26,6 @@ resource "helm_release" "k3k" {
   # Uninstalling the chart removes its CRDs, and with them every virtual
   # cluster of every customer. Destroying it has to be a deliberate edit.
   lifecycle {
-    prevent_destroy = false
+    prevent_destroy = true
   }
 }

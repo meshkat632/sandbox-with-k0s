@@ -187,7 +187,7 @@ resource "helm_release" "cert_manager" {
     yamlencode({
       crds = {
         enabled = true
-        keep    = true # uninstalling the release must not delete every Certificate
+        keep    = false # uninstalling the release must not delete every Certificate
       }
       config = local.cert_manager_config
       # The chart does not restart the controller when its config changes
