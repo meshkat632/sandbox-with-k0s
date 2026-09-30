@@ -46,7 +46,8 @@ resource "kubernetes_namespace_v1" "this" {
 # =============================================================================
 
 data "http" "gateway_api" {
-  url = "https://github.com/kubernetes-sigs/gateway-api/releases/download/${var.gateway_api_version}/experimental-install.yaml"
+  #url = "https://github.com/kubernetes-sigs/gateway-api/releases/download/${var.gateway_api_version}/experimental-install.yaml"
+  url = "https://github.com/kubernetes-sigs/gateway-api/releases/download/${var.gateway_api_version}/standard-install.yaml"
 
   lifecycle {
     postcondition {
