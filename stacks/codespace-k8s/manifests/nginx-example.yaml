@@ -36,10 +36,16 @@ kind: Ingress
 metadata:
   name: hello-world
   namespace: debug
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-nginx
 spec:
   ingressClassName: nginx
+  tls:
+    - hosts:
+        - hello-world.nginx.3-127-121-145.sslip.io
+      secretName: hello-world-tls
   rules:
-    - host: hello-world.3-127-121-145.sslip.io
+    - host: hello-world.nginx.3-127-121-145.sslip.io
       http:
         paths:
           - path: /
