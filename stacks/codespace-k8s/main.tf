@@ -46,7 +46,7 @@ resource "kubernetes_namespace_v1" "this" {
 # =============================================================================
 
 data "http" "gateway_api" {
-  url = "https://github.com/kubernetes-sigs/gateway-api/releases/download/${var.gateway_api_version}/standard-install.yaml"
+  url = "https://github.com/kubernetes-sigs/gateway-api/releases/download/${var.gateway_api_version}/experimental-install.yaml"
 
   lifecycle {
     postcondition {
@@ -118,6 +118,7 @@ resource "helm_release" "traefik" {
       providers = {
         kubernetesGateway = {
           enabled = true
+          experimentalChannel = true
           statusAddress = {
             ip      = local.public_host
             service = { enabled = false }
