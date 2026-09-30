@@ -1,18 +1,3 @@
-ephemeral "tunnel_ssm" "eks" {
-  ssm_instance = i-09ec158e7064a54f4
-  ssm_region   = var.region
-  target_host  = trimprefix(data.aws_eks_cluster.this.endpoint, "https://")
-  target_port  = 443
-}
-
-provider "kubernetes" {
-  host                   = "https://${ephemeral.tunnel_ssm.eks.local_host}:${ephemeral.tunnel_ssm.eks.local_port}"
-  tls_server_name        = local.eks_host   # certificate check still passes via localhost
-  cluster_ca_certificate = base64decode(data.aws_eks_cluster.this.certificate_authority[0].data)
-  token                  = data.aws_eks_cluster_auth.this.token
-}
-
-
 # =============================================================================
 # Cluster access
 # The codespace stack's instance writes its admin kubeconfig to Secrets
