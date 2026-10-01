@@ -117,3 +117,19 @@ variable "wait_timeout_seconds" {
   type    = number
   default = 600
 }
+
+
+   variable "install_k3k" {
+     type    = bool
+     default = true
+   }
+
+   variable "k3k_chart_version" {
+     type    = string
+     default = "1.2.0"
+   }
+
+   variable "k3k_namespace" {
+     type    = string
+     default = "k3k-system"
+   }

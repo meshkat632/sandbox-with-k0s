@@ -27,3 +27,8 @@ output "ssm_session_command" {
 output "whitelisted_cidrs" {
   value = local.api_cidrs
 }
+
+
+   output "k3k_install_logs_command" {
+     value = var.install_k3k ? "aws ssm describe-association-executions --region ${var.aws_region} --association-id ${aws_ssm_association.install_k3k[0].association_id}" : null
+   }
