@@ -1,0 +1,118 @@
+#!/bin/bash
+# Rendered by Terraform. Bootstraps a single-node K3s cluster (control plane +
+# worker) and publishes its admin kubeconfig to AWS Secrets Manager.
+# Log: /var/log/k3s-bootstrap.log
+set -euo pipefail
+exec > >(tee -a /var/log/k3s-bootstrap.log) 2>&1
+echo "==> bootstrap started $(date -Is)"
+
+# ---------------------------------------------------------------------------
+# AWS CLI (snap is preinstalled on Ubuntu 24.04)
+# ---------------------------------------------------------------------------
+snap wait system seed.loaded
+snap install aws-cli --classic
+
+mkdir -p /etc/rancher/k3s /etc/systemd/system/k3s.service.d
+
+# ---------------------------------------------------------------------------
+# 1. Before every K3s start: write the current public IP into the K3s config.
+#    No Elastic IP is used, so the IP can change after a stop/start.
+# ---------------------------------------------------------------------------
+cat > /usr/local/bin/k3s-refresh-ip.sh <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+TOKEN=$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+md() { curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/$1"; }
+
+PUBLIC_IP=$(md public-ipv4)
+PUBLIC_DNS=$(md public-hostname || true)
+
+{
+  echo 'write-kubeconfig-mode: "0600"'
+  echo "node-external-ip: \"$PUBLIC_IP\""
+  echo "tls-san:"
+  echo "  - \"$PUBLIC_IP\""
+  if [ -n "$PUBLIC_DNS" ]; then
+    echo "  - \"$PUBLIC_DNS\""
+  fi
+%{ for san in extra_tls_sans ~}
+  echo '  - "${san}"'
+%{ endfor ~}
+} > /etc/rancher/k3s/config.yaml
+echo "k3s config written for public IP $PUBLIC_IP"
+SCRIPT
+chmod 0755 /usr/local/bin/k3s-refresh-ip.sh
+
+cat > /etc/systemd/system/k3s.service.d/10-public-ip.conf <<'UNIT'
+[Service]
+ExecStartPre=/usr/local/bin/k3s-refresh-ip.sh
+UNIT
+
+# ---------------------------------------------------------------------------
+# 2. After every K3s start: publish the kubeconfig to Secrets Manager.
+# ---------------------------------------------------------------------------
+cat > /usr/local/bin/k3s-publish-kubeconfig.sh <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+
+echo "waiting for K3s API..."
+for _ in $(seq 1 90); do
+  if [ -s /etc/rancher/k3s/k3s.yaml ] && /usr/local/bin/k3s kubectl get --raw /readyz >/dev/null 2>&1; then
+    break
+  fi
+  sleep 5
+done
+
+PUBLIC_IP=$(sed -n 's/^node-external-ip: "\(.*\)"$/\1/p' /etc/rancher/k3s/config.yaml)
+KUBECONFIG_CONTENT=$(sed \
+  -e "s#https://127.0.0.1:6443#https://$PUBLIC_IP:6443#" \
+  -e "s/\(name\|cluster\|user\|current-context\): default$/\1: ${cluster_name}/" \
+  /etc/rancher/k3s/k3s.yaml)
+
+# Retries cover IAM instance-profile propagation right after first launch.
+for _ in $(seq 1 30); do
+  if /snap/bin/aws secretsmanager put-secret-value \
+       --region "${aws_region}" \
+       --secret-id "${secret_arn}" \
+       --secret-string "$KUBECONFIG_CONTENT" >/dev/null; then
+    echo "kubeconfig published for https://$PUBLIC_IP:6443"
+    exit 0
+  fi
+  sleep 10
+done
+echo "failed to publish kubeconfig" >&2
+exit 1
+SCRIPT
+chmod 0755 /usr/local/bin/k3s-publish-kubeconfig.sh
+
+cat > /etc/systemd/system/k3s-kubeconfig-publish.service <<'UNIT'
+[Unit]
+Description=Publish K3s kubeconfig to AWS Secrets Manager
+Requires=k3s.service
+After=k3s.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/k3s-publish-kubeconfig.sh
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+# ---------------------------------------------------------------------------
+# 3. Install K3s server (runs control plane AND kubelet on this node)
+# ---------------------------------------------------------------------------
+/usr/local/bin/k3s-refresh-ip.sh
+
+if [ -n "${k3s_version}" ]; then
+  export INSTALL_K3S_VERSION="${k3s_version}"
+else
+  export INSTALL_K3S_CHANNEL="${k3s_channel}"
+fi
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server" sh -
+
+systemctl daemon-reload
+systemctl enable --now k3s-kubeconfig-publish.service
+
+echo "==> bootstrap finished $(date -Is)"

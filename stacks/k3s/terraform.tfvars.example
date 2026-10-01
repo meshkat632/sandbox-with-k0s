@@ -1,0 +1,17 @@
+# In HCP Terraform set these as workspace "Terraform variables" instead of a tfvars file.
+
+aws_region    = "eu-central-1"
+name          = "k3k-host"
+instance_type = "t3.large"
+
+# Pin K3s, or leave empty to use the latest from the stable channel
+# k3s_version = "v1.33.5+k3s1"
+
+api_allowed_cidrs = ["0.0.0.0/0"]
+
+# Needed later for K3k HCP clusters exposed via NodePort
+# nodeport_allowed_cidrs = ["203.0.113.0/24"]
+
+# Optional SSH (SSM Session Manager works without it)
+# ssh_allowed_cidrs = ["198.51.100.7/32"]
+# key_name          = "my-keypair"
