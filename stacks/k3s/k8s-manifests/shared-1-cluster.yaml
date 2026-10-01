@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3k-hcp
+---
+apiVersion: k3k.io/v1beta1
+kind: Cluster
+metadata:
+  name: hcp-1
+  namespace: k3k-hcp
+spec:
+  mode: hcp                    # control plane only; workers join from outside (immutable)
+  servers: 1                   # control-plane server pods
+  version: v1.33.1-k3s1        # K3s version of the virtual cluster (K3k format, with "-")
+  tlsSANs:                     # addresses workers/you will use to reach the apiserver
+    - "3.76.190.187"           # host public IP
+    - "172.31.x.x"             # host private IP from step 1
+  expose:
+    nodePort:
+      serverPort: 30443        # fixed NodePort -> https://3.76.190.187:30443
