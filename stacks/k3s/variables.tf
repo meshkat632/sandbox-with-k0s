@@ -13,7 +13,7 @@ variable "name" {
 variable "instance_type" {
   description = "EC2 instance type for the single K3s node."
   type        = string
-  default     = "t3.large"
+  default     = "m7i-flex.xlarge"
 }
 
 variable "root_volume_size" {
