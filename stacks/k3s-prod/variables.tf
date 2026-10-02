@@ -55,9 +55,9 @@ variable "allowed_cidrs" {
 
 # --- K3s ---------------------------------------------------------------------
 variable "server_count" {
-  description = "K3s server nodes (embedded etcd requires 3 for HA)."
+  description = "K3s server nodes. 1 = single control plane, no HA; embedded etcd needs 3 for HA."
   type        = number
-  default     = 3
+  default     = 1
 }
 
 variable "instance_type" {
