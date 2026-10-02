@@ -3,7 +3,9 @@
 #
 # One Auto Scaling group of K3s agents per entry in var.node_pools, spread over
 # the private subnets. Agents register with server 0 and are labelled
-# node-pool=<pool name>.
+# node-pool=<pool name> and compute-class=<the pool's compute_class>, so a
+# workload can ask for a class of machine instead of naming a pool:
+#   nodeSelector: { compute-class: general-purpose }
 #
 # Changing a pool (instance type, labels, K3s version, ...) only affects NEW
 # instances; running ones are never replaced behind your back. Roll a pool with
@@ -57,7 +59,10 @@ resource "aws_launch_template" "worker" {
     k3s_version = var.k3s_version
     k3s_token   = random_password.k3s_token.result
     server0_ip  = local.server0_ip
-    node_labels = [for k, v in merge(each.value.labels, { "node-pool" = each.key }) : "${k}=${v}"]
+    node_labels = [for k, v in merge(each.value.labels, {
+      "node-pool"     = each.key
+      "compute-class" = each.value.compute_class
+    }) : "${k}=${v}"]
     node_taints = each.value.taints
   }))
 
@@ -91,6 +96,11 @@ resource "aws_autoscaling_group" "worker" {
     id      = aws_launch_template.worker[each.key].id
     version = aws_launch_template.worker[each.key].latest_version
   }
+
+  # Don't wait for the instances. When the instance profile is brand new, the first
+  # launches fail with "Authentication Failure" until IAM catches up; the group retries
+  # by itself, but Terraform would see the failed attempt and mark the group tainted.
+  wait_for_capacity_timeout = "0"
 
   # Agents install K3s through the NAT gateway and join server 0.
   depends_on = [

@@ -115,8 +115,9 @@ variable "restore_snapshot" {
 
 # --- Worker node pools --------------------------------------------------------
 variable "node_pools" {
-  description = "Worker node pools: pool name => settings. Each pool is an Auto Scaling group of `size` K3s agents, labelled node-pool=<name>. Taints use K3s syntax, e.g. \"dedicated=batch:NoSchedule\". {} means no workers."
+  description = "Worker node pools: pool name => settings. Each pool is an Auto Scaling group of `size` K3s agents, labelled node-pool=<name> and compute-class=<compute_class>. Several pools may share a compute class. Taints use K3s syntax, e.g. \"dedicated=batch:NoSchedule\". {} means no workers."
   type = map(object({
+    compute_class = optional(string, "general-purpose")
     instance_type = optional(string, "t3a.medium")
     size          = optional(number, 2)
     disk_size     = optional(number, 30)
@@ -130,6 +131,11 @@ variable "node_pools" {
   validation {
     condition     = alltrue([for name, _ in var.node_pools : can(regex("^[a-z0-9]([a-z0-9-]{0,18}[a-z0-9])?$", name))])
     error_message = "Pool names must be 1-20 characters of lowercase letters, digits and dashes."
+  }
+
+  validation {
+    condition     = alltrue([for _, p in var.node_pools : can(regex("^[A-Za-z0-9]([A-Za-z0-9._-]{0,61}[A-Za-z0-9])?$", p.compute_class))])
+    error_message = "compute_class must be a valid Kubernetes label value: up to 63 letters, digits, dashes, dots or underscores, starting and ending with a letter or digit."
   }
 
   validation {
