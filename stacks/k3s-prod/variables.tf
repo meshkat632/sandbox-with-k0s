@@ -95,3 +95,9 @@ variable "etcd_snapshot_retention" {
   type        = number
   default     = 28
 }
+
+variable "etcd_snapshot_bucket_force_destroy" {
+  description = "Let `terraform destroy` delete the snapshot bucket even when it still holds snapshots. Deletes the backups for good; apply the change before destroying."
+  type        = bool
+  default     = false
+}

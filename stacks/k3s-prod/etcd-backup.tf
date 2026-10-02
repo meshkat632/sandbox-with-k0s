@@ -11,9 +11,11 @@
 data "aws_caller_identity" "current" {}
 
 # --- Bucket ------------------------------------------------------------------
-# No force_destroy: `terraform destroy` refuses to delete a bucket that still holds snapshots.
+# By default `terraform destroy` refuses to delete a bucket that still holds snapshots;
+# set etcd_snapshot_bucket_force_destroy = true (and apply) before a deliberate teardown.
 resource "aws_s3_bucket" "etcd_snapshots" {
-  bucket = "${var.name}-etcd-snapshots-${data.aws_caller_identity.current.account_id}"
+  bucket        = "${var.name}-etcd-snapshots-${data.aws_caller_identity.current.account_id}"
+  force_destroy = var.etcd_snapshot_bucket_force_destroy
 
   tags = { Name = "${var.name}-etcd-snapshots" }
 }
