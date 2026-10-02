@@ -101,3 +101,14 @@ variable "etcd_snapshot_bucket_force_destroy" {
   type        = bool
   default     = false
 }
+
+variable "restore_snapshot" {
+  description = "Name of a snapshot in the cluster's S3 bucket (see `make snapshots`). When set, a newly created server 0 restores etcd from it on first boot instead of starting an empty cluster. Only affects new instances; needs the join token the snapshot was taken with (kept by `make destroy`)."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._-]*$", var.restore_snapshot))
+    error_message = "restore_snapshot must be a bare snapshot name, e.g. etcd-snapshot-k3s-server-0-1790940000."
+  }
+}

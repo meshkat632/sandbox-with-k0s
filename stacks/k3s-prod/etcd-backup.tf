@@ -7,6 +7,12 @@
 # if a snapshot cannot reach S3. It re-runs when the script, settings or servers change.
 # Logs: AWS console -> Systems Manager -> State Manager, or
 #   aws ssm describe-association-executions --association-id <id>
+#
+# Rebuild the cluster from a snapshot:
+#   make snapshots                      # pick a snapshot name
+#   make destroy                        # removes everything except the bucket and join token
+#   terraform apply -var restore_snapshot=<name>
+# The new server 0 restores etcd from the bucket on first boot; further servers join it.
 # ---------------------------------------------------------------------------
 data "aws_caller_identity" "current" {}
 

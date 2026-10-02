@@ -1,5 +1,9 @@
 # ---------------------------------------------------------------
 # Shared join token (replaces the auto-generated one)
+#
+# etcd snapshots can only be restored with the token they were taken with, so
+# `make destroy` keeps this resource. A plain `terraform destroy` deletes it and
+# makes every existing snapshot unrestorable.
 # ---------------------------------------------------------------
 resource "random_password" "k3s_token" {
   length  = 48
@@ -52,7 +56,24 @@ resource "aws_instance" "k3s_server" {
     server0_ip   = local.server0_ip
     is_first     = count.index == 0
     node_name    = "k3s-server-${count.index}"
+    # Derived from the token, so a rebuilt node gets the password a restored cluster expects.
+    node_password = sha256("${random_password.k3s_token.result}/k3s-server-${count.index}")
+
+    # Server 0 restores this snapshot from the bucket on first boot (see etcd-backup.tf)
+    restore_snapshot = var.restore_snapshot
+    etcd_s3_bucket   = aws_s3_bucket.etcd_snapshots.bucket
+    etcd_s3_region   = var.aws_region
+    etcd_s3_folder   = var.name
   })
 
   tags = { Name = "${var.name}-server-${count.index}", Role = "k3s-server" }
+
+  lifecycle {
+    # User data only runs on first boot, so changing it on a running instance would just
+    # stop and start it. Roll a change out with `terraform apply -replace=<address>`.
+    ignore_changes = [user_data]
+  }
+
+  # A restore reads the bucket during first boot.
+  depends_on = [aws_iam_role_policy.k3s_etcd_snapshots]
 }

@@ -14,7 +14,7 @@ TF ?= terraform
 CACHE_DIRS  := .terraform
 CACHE_FILES := *.tfplan tfplan crash.log crash.*.log
 
-.PHONY: help clean clean-all init fmt validate plan apply kubeconfig
+.PHONY: help clean clean-all init fmt validate plan apply destroy snapshots kubeconfig
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -49,6 +49,15 @@ plan: ## terraform plan
 
 apply: ## terraform apply
 	$(TF) apply
+
+destroy: ## Destroy the cluster but keep the snapshot bucket and join token, so it can be restored
+	mapfile -t targets < <($(TF) state list | grep -vE '^(data\.|random_password\.k3s_token$$|aws_s3_bucket)' | sed 's/^/-target=/')
+	if [ "$${#targets[@]}" -eq 0 ]; then echo "nothing to destroy (only the bucket and token are left)"; exit 0; fi
+	$(TF) destroy "$${targets[@]}"
+
+snapshots: ## List the etcd snapshots in the cluster's S3 bucket
+	bucket="$$($(TF) state show aws_s3_bucket.etcd_snapshots | sed -n 's/^ *bucket *= *"\(.*\)"$$/\1/p' | head -1)"
+	aws s3 ls "s3://$$bucket/" --recursive
 
 kubeconfig: ## Write ~/.kube/configs/k3s-prod.yaml (fetched from server 0 via SSM, points at the API load balancer)
 	./scripts/get-kubeconfig.sh
