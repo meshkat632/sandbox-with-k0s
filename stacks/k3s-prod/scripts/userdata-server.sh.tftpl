@@ -1,0 +1,36 @@
+#!/bin/bash
+set -euxo pipefail
+
+# Basic hardening for a lightweight node
+echo "net.ipv4.ip_forward=1" >> /etc/sysctl.d/99-k3s.conf
+echo "net.bridge.bridge-nf-call-iptables=1" >> /etc/sysctl.d/99-k3s.conf
+sysctl --system
+
+%{ if is_first }
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${k3s_version}" sh -s - server \
+  --cluster-init \
+  --token "${k3s_token}" \
+  --cluster-cidr "${cluster_cidr}" \
+  --service-cidr "${service_cidr}" \
+  --node-name "${node_name}" \
+  --write-kubeconfig-mode 600 \
+  --disable servicelb \
+  --disable traefik
+%{ else }
+until curl -ksf https://${server0_ip}:6443/ping; do sleep 5; done
+
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${k3s_version}" sh -s - server \
+  --server "https://${server0_ip}:6443" \
+  --token "${k3s_token}" \
+  --cluster-cidr "${cluster_cidr}" \
+  --service-cidr "${service_cidr}" \
+  --node-name "${node_name}" \
+  --write-kubeconfig-mode 600 \
+  --disable servicelb \
+  --disable traefik
+%{ endif }
+
+# etcd snapshots every 6h to local disk (S3 via IAM profile if you want off-node copies)
+cat > /etc/cron.d/k3s-snapshot <<'EOF'
+0 */6 * * * root k3s etcd-snapshot save --name etcd-$(date +\%Y\%m\%d-\%H\%M)
+EOF
