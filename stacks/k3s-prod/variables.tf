@@ -83,3 +83,15 @@ variable "service_cidr" {
   type        = string
   default     = "10.43.0.0/16"
 }
+
+variable "etcd_snapshot_schedule" {
+  description = "Cron schedule for etcd snapshots; every snapshot is also uploaded to the cluster's S3 bucket."
+  type        = string
+  default     = "0 */6 * * *"
+}
+
+variable "etcd_snapshot_retention" {
+  description = "Scheduled etcd snapshots to keep (per server, locally and in S3). 28 = one week at the default schedule."
+  type        = number
+  default     = 28
+}

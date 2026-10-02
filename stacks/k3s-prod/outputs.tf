@@ -21,3 +21,8 @@ output "api_endpoint" {
   description = "Kube API behind the public NLB (reachable from allowed_cidrs only)."
   value       = "https://${aws_lb.api.dns_name}:6443"
 }
+
+output "etcd_snapshot_bucket" {
+  description = "S3 bucket holding this cluster's etcd snapshots (under the <name>/ prefix)."
+  value       = aws_s3_bucket.etcd_snapshots.bucket
+}

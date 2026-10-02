@@ -14,7 +14,7 @@ resource "aws_iam_role" "k3s" {
   assume_role_policy = data.aws_iam_policy_document.k3s_assume.json
 }
 
-# Minimal: lets k3s tag instances/EIPs (cloud provider) + S3 snapshot option
+# Minimal: lets k3s tag instances/EIPs (cloud provider). Snapshot bucket rights: etcd-backup.tf
 resource "aws_iam_role_policy" "k3s" {
   name = "${var.name}-k3s"
   role = aws_iam_role.k3s.id
