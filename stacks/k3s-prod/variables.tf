@@ -112,3 +112,28 @@ variable "restore_snapshot" {
     error_message = "restore_snapshot must be a bare snapshot name, e.g. etcd-snapshot-k3s-server-0-1790940000."
   }
 }
+
+# --- Worker node pools --------------------------------------------------------
+variable "node_pools" {
+  description = "Worker node pools: pool name => settings. Each pool is an Auto Scaling group of `size` K3s agents, labelled node-pool=<name>. Taints use K3s syntax, e.g. \"dedicated=batch:NoSchedule\". {} means no workers."
+  type = map(object({
+    instance_type = optional(string, "t3a.medium")
+    size          = optional(number, 2)
+    disk_size     = optional(number, 30)
+    labels        = optional(map(string), {})
+    taints        = optional(list(string), [])
+  }))
+  default = {
+    default = {}
+  }
+
+  validation {
+    condition     = alltrue([for name, _ in var.node_pools : can(regex("^[a-z0-9]([a-z0-9-]{0,18}[a-z0-9])?$", name))])
+    error_message = "Pool names must be 1-20 characters of lowercase letters, digits and dashes."
+  }
+
+  validation {
+    condition     = alltrue([for _, p in var.node_pools : p.size >= 0 && p.disk_size >= 20])
+    error_message = "Each pool needs size >= 0 and disk_size >= 20 (GB)."
+  }
+}

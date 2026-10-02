@@ -1,0 +1,41 @@
+#!/bin/bash
+# No -x: this script handles the cluster token, and its output goes to the EC2 console log.
+set -euo pipefail
+
+# Basic hardening for a lightweight node
+echo "net.ipv4.ip_forward=1" >> /etc/sysctl.d/99-k3s.conf
+echo "net.bridge.bridge-nf-call-iptables=1" >> /etc/sysctl.d/99-k3s.conf
+sysctl --system
+
+# --- K3s configuration ----------------------------------------------------------
+umask 077
+mkdir -p /etc/rancher/k3s /etc/rancher/node
+
+# Fixed node password (K3s would otherwise generate a random one), derived from the
+# token and the hostname. The cluster remembers the password per node name, so a
+# replacement instance that gets a recycled IP (same hostname), or a node rejoining a
+# cluster restored from a snapshot, would otherwise be rejected.
+printf '%s' "$(printf '%s' '${k3s_token}/'"$(hostname)" | sha256sum | cut -d' ' -f1)" > /etc/rancher/node/password
+
+cat > /etc/rancher/k3s/config.yaml <<'EOF'
+server: "https://${server0_ip}:6443"
+token: "${k3s_token}"
+%{ if length(node_labels) > 0 ~}
+node-label:
+%{ for l in node_labels ~}
+  - "${l}"
+%{ endfor ~}
+%{ endif ~}
+%{ if length(node_taints) > 0 ~}
+node-taint:
+%{ for t in node_taints ~}
+  - "${t}"
+%{ endfor ~}
+%{ endif ~}
+EOF
+umask 022
+
+# --- Install ----------------------------------------------------------------------
+until curl -ksf https://${server0_ip}:6443/ping; do sleep 5; done
+
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${k3s_version}" sh -s - agent
