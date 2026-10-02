@@ -7,6 +7,32 @@ echo "net.ipv4.ip_forward=1" >> /etc/sysctl.d/99-k3s.conf
 echo "net.bridge.bridge-nf-call-iptables=1" >> /etc/sysctl.d/99-k3s.conf
 sysctl --system
 
+%{ if kata ~}
+# --- Kata Containers needs KVM and the vhost modules ---------------------------------
+printf '%s\n' kvm_intel vhost_net vhost_vsock > /etc/modules-load.d/kata.conf
+load_kata_modules() { for m in kvm_intel vhost_net vhost_vsock; do modprobe "$m" || return 1; done; }
+if ! load_kata_modules; then
+  # some of them ship in the "extra" modules package on cloud kernels
+  apt-get update -y
+  DEBIAN_FRONTEND=noninteractive apt-get install -y "linux-modules-extra-$(uname -r)"
+  load_kata_modules
+fi
+if [ ! -e /dev/kvm ]; then
+  echo "ERROR: /dev/kvm is missing. This pool has kata = true, so the instance type must" >&2
+  echo "       support nested virtualization (C8i/M8i/R8i) or be bare metal." >&2
+  exit 1
+fi
+
+# kata-deploy registers the Kata runtime through a containerd drop-in file, and refuses
+# to install unless K3s's containerd config imports the drop-in directory. This K3s
+# version does not do that by default, so extend its built-in template with the import.
+mkdir -p /var/lib/rancher/k3s/agent/etc/containerd
+cat > /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl <<'EOF'
+imports = ["/var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.d/*.toml"]
+{{ template "base" . }}
+EOF
+
+%{ endif ~}
 # --- K3s configuration ----------------------------------------------------------
 umask 077
 mkdir -p /etc/rancher/k3s /etc/rancher/node

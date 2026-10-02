@@ -115,10 +115,11 @@ variable "restore_snapshot" {
 
 # --- Worker node pools --------------------------------------------------------
 variable "node_pools" {
-  description = "Worker node pools: pool name => settings. Each pool is an Auto Scaling group of `size` K3s agents, labelled node-pool=<name> and compute-class=<compute_class>. Several pools may share a compute class. Taints use K3s syntax, e.g. \"dedicated=batch:NoSchedule\". {} means no workers."
+  description = "Worker node pools: pool name => settings. Each pool is an Auto Scaling group of `size` K3s agents, labelled node-pool=<name> and compute-class=<compute_class>. Several pools may share a compute class. kata = true makes the pool able to run Kata Containers (nested virtualization, KVM), which needs a C8i/M8i/R8i or bare-metal instance type. Taints use K3s syntax, e.g. \"dedicated=batch:NoSchedule\". {} means no workers."
   type = map(object({
     compute_class = optional(string, "general-purpose")
-    instance_type = optional(string, "t3a.medium")
+    kata          = optional(bool, true)
+    instance_type = optional(string, "m8i-flex.large")
     size          = optional(number, 2)
     disk_size     = optional(number, 30)
     labels        = optional(map(string), {})
@@ -139,7 +140,18 @@ variable "node_pools" {
   }
 
   validation {
+    condition     = alltrue([for _, p in var.node_pools : !p.kata || can(regex("^([cmr]8i(-flex)?\\.|[a-z0-9-]+\\.metal)", p.instance_type))])
+    error_message = "A pool with kata = true needs KVM: use a C8i, M8i or R8i instance type (nested virtualization) or a bare-metal one, or set kata = false."
+  }
+
+  validation {
     condition     = alltrue([for _, p in var.node_pools : p.size >= 0 && p.disk_size >= 20])
     error_message = "Each pool needs size >= 0 and disk_size >= 20 (GB)."
   }
+}
+
+variable "kata_version" {
+  description = "Kata Containers release (kata-deploy Helm chart version) installed when any pool has kata = true."
+  type        = string
+  default     = "4.2.0"
 }

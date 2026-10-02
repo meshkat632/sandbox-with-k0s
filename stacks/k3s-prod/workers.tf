@@ -6,6 +6,7 @@
 # node-pool=<pool name> and compute-class=<the pool's compute_class>, so a
 # workload can ask for a class of machine instead of naming a pool:
 #   nodeSelector: { compute-class: general-purpose }
+# Pools with kata = true can also run Kata Containers pods (see kata.tf).
 #
 # Changing a pool (instance type, labels, K3s version, ...) only affects NEW
 # instances; running ones are never replaced behind your back. Roll a pool with
@@ -45,6 +46,15 @@ resource "aws_launch_template" "worker" {
     name = aws_iam_instance_profile.k3s_worker.name
   }
 
+  # Kata runs each pod in a VM, so the node needs KVM. Bare-metal types have it anyway.
+  dynamic "cpu_options" {
+    for_each = each.value.kata && !endswith(each.value.instance_type, ".metal") ? [1] : []
+
+    content {
+      nested_virtualization = "enabled"
+    }
+  }
+
   block_device_mappings {
     device_name = data.aws_ami.ubuntu.root_device_name
 
@@ -59,10 +69,12 @@ resource "aws_launch_template" "worker" {
     k3s_version = var.k3s_version
     k3s_token   = random_password.k3s_token.result
     server0_ip  = local.server0_ip
-    node_labels = [for k, v in merge(each.value.labels, {
-      "node-pool"     = each.key
-      "compute-class" = each.value.compute_class
-    }) : "${k}=${v}"]
+    kata        = each.value.kata
+    node_labels = [for k, v in merge(
+      each.value.labels,
+      { "node-pool" = each.key, "compute-class" = each.value.compute_class },
+      each.value.kata ? { "kata" = "true" } : {},
+    ) : "${k}=${v}"]
     node_taints = each.value.taints
   }))
 
