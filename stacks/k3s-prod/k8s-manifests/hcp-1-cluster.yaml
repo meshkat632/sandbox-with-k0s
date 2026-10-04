@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3k-hcp
+---
+apiVersion: k3k.io/v1beta1
+kind: Cluster
+metadata:
+  name: hcp-1
+  namespace: k3k-hcp
+spec:
+  mode: hcp                      # control plane only; workers are external machines that join later (immutable)
+  servers: 1                     # K3s control-plane pods
+  # agents: not used in hcp mode (no worker pods on the host)
+  # version: v1.36.4-k3s1        # omit = same Kubernetes version as the host; workers must install the same
+  tlsSANs:
+    - "63.185.150.41"            # host public IP: for you and for external workers
+  expose:
+    nodePort:
+      serverPort: 30443          # fixed NodePort -> https://63.185.150.41:30443 (30444 shared-1, 30445 virtual-1)
+  persistence:
+    type: dynamic                # control-plane data on a PVC
+    storageClassName: local-path
+    storageRequestSize: 2G
+  serverResources:               # limits for the server pod (control plane)
+    requests: {cpu: 200m, memory: 512Mi}
+    limits:   {cpu: "1",  memory: 1Gi}
+  # no workerResources: workers are your own machines, their capacity is whatever they have

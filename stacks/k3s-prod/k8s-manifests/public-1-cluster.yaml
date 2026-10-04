@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3k-public
+---
+apiVersion: k3k.io/v1beta1
+kind: Cluster
+metadata:
+  name: public-1
+  namespace: k3k-public
+spec:
+  mode: shared
+  servers: 1
+  tlsSANs:
+    - "63.185.150.41"            # the external address clients put in their kubeconfig
+    # - "<worker-public-ip>"     # add this too if you'll hit a node directly
+  expose:
+    nodePort:
+      serverPort: 30444          # https://<external>:30444
+  persistence:
+    type: dynamic
+    storageClassName: local-path
+    storageRequestSize: 2G
+  sync:
+    services:        {enabled: true}
+    configMaps:      {enabled: true}
+    secrets:         {enabled: true}
+    persistentVolumeClaims: {enabled: true}
+    ingresses:       {enabled: false}

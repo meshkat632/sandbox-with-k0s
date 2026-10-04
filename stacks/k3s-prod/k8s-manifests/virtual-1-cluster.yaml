@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3k-virtual
+---
+apiVersion: k3k.io/v1beta1
+kind: Cluster
+metadata:
+  name: virtual-1
+  namespace: k3k-virtual
+spec:
+  mode: virtual                  # full K3s cluster (server + agents) running as pods on the host (immutable)
+  servers: 1                     # K3s control-plane pods
+  agents: 1                      # K3s agent pods = the virtual cluster's own worker nodes
+  # version: v1.36.4-k3s1        # omit = same Kubernetes version as the host
+  tlsSANs:
+    - "63.185.150.41"            # host public IP: what you use from your laptop
+  expose:
+    nodePort:
+      serverPort: 30445          # fixed NodePort -> https://63.185.150.41:30445 (30443 hcp-1, 30444 shared-1)
+  persistence:
+    type: dynamic                # control-plane data on a PVC
+    storageClassName: local-path
+    storageRequestSize: 2G
+  serverResources:               # limits for the server pod (control plane)
+    requests: {cpu: 200m, memory: 512Mi}
+    limits:   {cpu: "1",  memory: 1Gi}
+  workerResources:               # limits for each agent pod = capacity available to workloads inside
+    requests: {cpu: 200m, memory: 512Mi}
+    limits:   {cpu: "1",  memory: 2Gi}
+  # clusterCIDR / serviceCIDR default to 10.52.0.0/16 / 10.53.0.0/16 in virtual mode (own network)

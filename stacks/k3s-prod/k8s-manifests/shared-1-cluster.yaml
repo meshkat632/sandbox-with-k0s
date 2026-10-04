@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3k-shared
+---
+apiVersion: k3k.io/v1beta1
+kind: Cluster
+metadata:
+  name: shared-1
+  namespace: k3k-shared
+spec:
+  mode: shared
+  servers: 1
+  # no expose block  -> ClusterIP only, not reachable from outside the cluster
+  # no public tlsSANs -> not needed; k3s cert already includes 127.0.0.1 for port-forward
+  persistence:
+    type: dynamic
+    storageClassName: local-path
+    storageRequestSize: 2G
+  sync:
+    services:        {enabled: true}
+    configMaps:      {enabled: true}
+    secrets:         {enabled: true}
+    persistentVolumeClaims: {enabled: true}
+    ingresses:       {enabled: false}
