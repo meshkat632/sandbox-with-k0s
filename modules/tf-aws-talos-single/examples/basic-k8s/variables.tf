@@ -28,6 +28,12 @@ variable "prometheus_chart_version" {
   default     = "29.35.0"
 }
 
+variable "grafana_chart_version" {
+  description = "grafana Helm chart version (grafana-community repo)"
+  type        = string
+  default     = "13.2.7"
+}
+
 variable "ingress_nginx_chart_version" {
   description = "ingress-nginx Helm chart version"
   type        = string

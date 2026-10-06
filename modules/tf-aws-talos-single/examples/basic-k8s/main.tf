@@ -86,6 +86,66 @@ resource "helm_release" "prometheus" {
 }
 
 # =============================================================================
+# Grafana
+# Prometheus above as the default datasource, plus the kube-state-metrics
+# dashboard from dashboards/. No persistence: anything changed in the UI is
+# lost when the pod restarts, the provisioned dashboard comes back.
+# The admin password is generated into the "grafana" Secret.
+# =============================================================================
+resource "helm_release" "grafana" {
+  name       = "grafana"
+  repository = "https://grafana-community.github.io/helm-charts"
+  chart      = "grafana"
+  version    = var.grafana_chart_version
+  namespace  = helm_release.prometheus.namespace
+
+  values = [
+    yamlencode({
+      datasources = {
+        "datasources.yaml" = {
+          apiVersion = 1
+          datasources = [{
+            name      = "Prometheus"
+            type      = "prometheus"
+            uid       = "prometheus" # referenced by the dashboard
+            url       = "http://prometheus-server.${helm_release.prometheus.namespace}.svc"
+            access    = "proxy"
+            isDefault = true
+          }]
+        }
+      }
+      dashboardProviders = {
+        "dashboardproviders.yaml" = {
+          apiVersion = 1
+          providers = [{
+            name            = "default"
+            orgId           = 1
+            folder          = ""
+            type            = "file"
+            disableDeletion = false
+            editable        = true
+            options = {
+              path = "/var/lib/grafana/dashboards/default"
+            }
+          }]
+        }
+      }
+      dashboards = {
+        default = {
+          "kube-state-metrics" = {
+            json = file("${path.module}/dashboards/kube-state-metrics.json")
+          }
+        }
+      }
+    })
+  ]
+
+  atomic  = true
+  wait    = true
+  timeout = 600
+}
+
+# =============================================================================
 # ingress-nginx
 # No cloud load balancer here, so the controller runs on every node and binds
 # ports 80/443 there (hostPort). Talos enforces the "baseline" pod security

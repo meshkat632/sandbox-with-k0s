@@ -91,12 +91,24 @@ kubeconfig from the `talos-single-test` workspace, so run it after
 | metrics-server | kube-system | `kubectl top`, HPA. Runs with `--kubelet-insecure-tls` |
 | kube-state-metrics | kube-system | Metrics on `kube-state-metrics:8080`, scraped by Prometheus |
 | prometheus | monitoring | Server only (no Alertmanager, node-exporter, Pushgateway). emptyDir storage, 2d retention |
+| grafana | monitoring | Prometheus datasource + the "Kubernetes / kube-state-metrics" dashboard. No persistence |
 | ingress-nginx | ingress-nginx | DaemonSet on host ports 80/443 of every node, default class `nginx` |
 | cert-manager | cert-manager | Controller + CRDs only, no issuers |
 
-Prometheus is ClusterIP only. To open its UI on http://localhost:9090:
+Prometheus and Grafana are ClusterIP only. To open them locally:
 
-    kubectl -n monitoring port-forward svc/prometheus-server 9090:80
+    kubectl -n monitoring port-forward svc/prometheus-server 9090:80   # http://localhost:9090
+    kubectl -n monitoring port-forward svc/grafana 3000:80             # http://localhost:3000
+
+Grafana's user is `admin`; the generated password is in the `grafana` Secret:
+
+    kubectl -n monitoring get secret grafana -o jsonpath='{.data.admin-password}' | base64 -d
+
+The dashboard is provisioned from
+`examples/basic-k8s/dashboards/kube-state-metrics.json`: nodes ready, pods by
+phase and per node, CPU/memory requests vs allocatable, deployments and
+container restarts, filterable by namespace. Edit that file and re-apply to
+change it; edits made in the Grafana UI are lost when the pod restarts.
 
 ingress-nginx is reachable on any node's public IP once the module's
 `http_ingress_cidrs` allows it. `examples/basic` sets it to `0.0.0.0/0`;
