@@ -14,3 +14,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "worker_count" {
+  description = "Extra worker nodes (0 = single-node cluster)"
+  type        = number
+  default     = 0
+}

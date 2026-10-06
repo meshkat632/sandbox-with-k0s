@@ -2,19 +2,25 @@
 
 One EC2 instance in the default VPC = one complete Talos Kubernetes cluster
 (control plane + worker in a single node). Ephemeral public IP, no Elastic IP.
+Optionally adds worker nodes with `worker_count` (default 0); the control
+plane stays a single node.
 
 ## What it does, in order
 
 1. Resolves the default VPC + its public subnet
 2. Finds the official Talos AMI for the provider's region + arch (override with `ami_id`)
-3. Creates a locked-down SG (50000 + 6443 from your IP only)
+3. Creates a locked-down SG (50000 + 6443 from your IP only, all traffic
+   between the nodes themselves)
 4. Launches the instance (gp3 root disk, `disk_size` GiB, auto-assigned public IP)
+   plus `worker_count` identical worker instances
 5. Generates Talos cluster secrets
 6. Renders the control-plane config (patched: allowSchedulingOnControlPlanes,
    installer image pinned to `talos_semver`, install disk `/dev/nvme0n1`)
 7. Applies config to the node over the Talos API (:50000) - connects to the
    public IP (endpoint), addresses the node by its private IP
 8. Bootstraps etcd -> cluster exists
+   Workers get a worker config that points at the control plane's private IP
+   and join on their own
 9. Retrieves the admin kubeconfig
 
 ## Usage
@@ -48,6 +54,11 @@ execution - switch it to local, since HCP runners can't reach the node.
     # tear down
     terraform destroy
 
+Add workers by setting `worker_count`, in the example via
+`terraform apply -var worker_count=2` (or `TF_VAR_worker_count=2 make timed-up`).
+Changing it later adds or removes worker instances without touching the
+control plane.
+
 The example's Makefile handles the kubeconfig:
 
 - `make kubeconfig` - copy the admin kubeconfig to
@@ -58,10 +69,10 @@ The example's Makefile handles the kubeconfig:
 
 To measure how long a usable cluster takes, create it with `make timed-up`
 instead of `terraform apply` (it auto-approves, so no prompt time is counted).
-It waits until the node is Ready, CoreDNS is rolled out and all kube-system
+It waits until every node is Ready, CoreDNS is rolled out and all kube-system
 pods are Ready, then appends a row to `examples/basic/timings.csv`:
 terraform apply seconds, apply -> ready seconds, total, Kubernetes and Talos
-versions. `make timings` prints the recorded runs.
+versions, node count. `make timings` prints the recorded runs.
 
 ## Known caveats (read before using beyond a lab)
 
@@ -78,5 +89,9 @@ versions. `make timings` prints the recorded runs.
 - Single-node etcd has no redundancy: instance loss = cluster loss.
   The module's on_destroy resets the node to maintenance mode (non-graceful:
   the only etcd member can't leave its own cluster).
+- Workers don't add redundancy: there is still one control plane and one
+  etcd member. The control plane also keeps running workloads.
+- Lowering `worker_count` terminates the instance but leaves its Node object
+  behind as NotReady - remove it with `kubectl delete node <name>`.
 - `allowed_cidr` defaults to the IP you run terraform from.
 - Secrets land in TF state as usual - this is a lab pattern.

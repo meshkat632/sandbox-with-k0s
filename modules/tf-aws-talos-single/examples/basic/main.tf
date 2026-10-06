@@ -2,6 +2,7 @@ module "talos_single" {
   source = "../../"
 
   cluster_name = var.name
+  worker_count = var.worker_count
 
   # Optional overrides:
   # instance_type    = "t3.xlarge"
@@ -12,6 +13,14 @@ module "talos_single" {
 
 output "public_ip" {
   value = module.talos_single.public_ip
+}
+
+output "worker_public_ips" {
+  value = module.talos_single.worker_public_ips
+}
+
+output "node_count" {
+  value = module.talos_single.node_count
 }
 
 output "kubeconfig" {

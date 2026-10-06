@@ -27,6 +27,17 @@ variable "instance_type" {
   default     = "t3.large"
 }
 
+variable "worker_count" {
+  description = "Number of extra worker nodes joined to the single control plane (0 = single-node cluster)"
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.worker_count >= 0 && floor(var.worker_count) == var.worker_count
+    error_message = "worker_count must be a whole number >= 0."
+  }
+}
+
 variable "disk_size" {
   description = "Root disk size in GiB (Talos puts kubelet ephemeral storage here)"
   type        = number
