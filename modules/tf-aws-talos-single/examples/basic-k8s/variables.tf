@@ -22,6 +22,12 @@ variable "kube_state_metrics_chart_version" {
   default     = "8.6.0"
 }
 
+variable "prometheus_chart_version" {
+  description = "prometheus Helm chart version"
+  type        = string
+  default     = "29.35.0"
+}
+
 variable "ingress_nginx_chart_version" {
   description = "ingress-nginx Helm chart version"
   type        = string

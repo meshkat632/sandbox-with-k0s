@@ -89,9 +89,14 @@ kubeconfig from the `talos-single-test` workspace, so run it after
 | Component | Namespace | Notes |
 |---|---|---|
 | metrics-server | kube-system | `kubectl top`, HPA. Runs with `--kubelet-insecure-tls` |
-| kube-state-metrics | kube-system | Metrics on `kube-state-metrics:8080`; nothing scrapes them yet |
+| kube-state-metrics | kube-system | Metrics on `kube-state-metrics:8080`, scraped by Prometheus |
+| prometheus | monitoring | Server only (no Alertmanager, node-exporter, Pushgateway). emptyDir storage, 2d retention |
 | ingress-nginx | ingress-nginx | DaemonSet on host ports 80/443 of every node, default class `nginx` |
 | cert-manager | cert-manager | Controller + CRDs only, no issuers |
+
+Prometheus is ClusterIP only. To open its UI on http://localhost:9090:
+
+    kubectl -n monitoring port-forward svc/prometheus-server 9090:80
 
 ingress-nginx is reachable on any node's public IP once the module's
 `http_ingress_cidrs` allows it. `examples/basic` sets it to `0.0.0.0/0`;

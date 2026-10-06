@@ -24,7 +24,7 @@ resource "helm_release" "metrics_server" {
 # =============================================================================
 # kube-state-metrics
 # Object state as Prometheus metrics on kube-state-metrics.kube-system:8080.
-# Nothing scrapes it until a Prometheus is added.
+# Its Service carries prometheus.io/scrape, which is how Prometheus finds it.
 # =============================================================================
 resource "helm_release" "kube_state_metrics" {
   name       = "kube-state-metrics"
@@ -36,6 +36,53 @@ resource "helm_release" "kube_state_metrics" {
   atomic  = true
   wait    = true
   timeout = 600
+}
+
+# =============================================================================
+# Prometheus
+# Server only: the chart's bundled kube-state-metrics, node-exporter,
+# Alertmanager and Pushgateway are off. Its default scrape config picks up
+# every Service annotated prometheus.io/scrape (kube-state-metrics above),
+# plus the API server, kubelets and cAdvisor.
+# No StorageClass in this cluster, so data lives in an emptyDir and is lost
+# when the pod is rescheduled.
+# =============================================================================
+resource "helm_release" "prometheus" {
+  name             = "prometheus"
+  repository       = "https://prometheus-community.github.io/helm-charts"
+  chart            = "prometheus"
+  version          = var.prometheus_chart_version
+  namespace        = "monitoring"
+  create_namespace = true
+
+  values = [
+    yamlencode({
+      server = {
+        persistentVolume = {
+          enabled = false
+        }
+        retention = "2d"
+      }
+      alertmanager = {
+        enabled = false
+      }
+      "kube-state-metrics" = {
+        enabled = false
+      }
+      "prometheus-node-exporter" = {
+        enabled = false
+      }
+      "prometheus-pushgateway" = {
+        enabled = false
+      }
+    })
+  ]
+
+  atomic  = true
+  wait    = true
+  timeout = 600
+
+  depends_on = [helm_release.kube_state_metrics]
 }
 
 # =============================================================================
