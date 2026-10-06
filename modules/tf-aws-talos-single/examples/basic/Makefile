@@ -1,4 +1,4 @@
-.PHONY: kubeconfig kubeconfig-install nodes
+.PHONY: kubeconfig kubeconfig-install nodes timed-up timings
 
 KUBECONFIG_FILE := kubeconfig.yaml
 KUBECONFIG_DIR  ?= $(HOME)/.kube/configs
@@ -19,3 +19,11 @@ kubeconfig-install: kubeconfig
 
 nodes: kubeconfig
 	@kubectl --kubeconfig $(KUBECONFIG_FILE) get nodes -o wide
+
+# terraform apply (auto-approved) + wait until Kubernetes is usable;
+# appends the durations to timings.csv
+timed-up:
+	@./time_up.sh
+
+timings:
+	@column -s, -t timings.csv

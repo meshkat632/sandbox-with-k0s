@@ -51,6 +51,13 @@ The example's Makefile handles the kubeconfig:
   The context is `admin@<cluster_name>`. Remove the file after a destroy.
 - `make nodes` - `kubectl get nodes -o wide` against `./kubeconfig.yaml`
 
+To measure how long a usable cluster takes, create it with `make timed-up`
+instead of `terraform apply` (it auto-approves, so no prompt time is counted).
+It waits until the node is Ready, CoreDNS is rolled out and all kube-system
+pods are Ready, then appends a row to `examples/basic/timings.csv`:
+terraform apply seconds, apply -> ready seconds, total, Kubernetes and Talos
+versions. `make timings` prints the recorded runs.
+
 ## Known caveats (read before using beyond a lab)
 
 - **TEMPORARY: the SG is open to the world.** An extra ingress rule allows

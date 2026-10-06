@@ -1,0 +1,2 @@
+started_at_utc,apply_seconds,ready_seconds,total_seconds,kubernetes,os_image
+2026-10-06T09:29:43Z,39,66,105,v1.33.0,Talos (v1.12.6)
