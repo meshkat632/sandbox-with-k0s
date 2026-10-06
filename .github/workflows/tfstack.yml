@@ -1,0 +1,84 @@
+name: tfstack
+
+on:
+  push:
+    branches: [main]
+    tags: ["tfstack/v*"]
+    paths: ["tfstack/**", ".github/workflows/tfstack.yml"]
+  pull_request:
+    paths: ["tfstack/**", ".github/workflows/tfstack.yml"]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: tfstack
+    shell: bash
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: tfstack/go.mod
+      - run: go vet ./...
+      - run: go test -race ./...
+      - name: gofmt
+        if: matrix.os == 'ubuntu-latest'
+        run: make fmt-check
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: tfstack/go.mod
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.14
+          working-directory: tfstack
+
+  example:
+    # Runs the real thing: apply and destroy the example stacks, which only
+    # use the built-in terraform_data resource and local state.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: tfstack/go.mod
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: make build
+      - run: bin/tfstack -dir examples/stacks apply -auto-approve
+      - run: bin/tfstack -dir examples/stacks plan -detailed-exitcode
+      - run: bin/tfstack -dir examples/stacks destroy -auto-approve
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/tfstack/v')
+    needs: [test, lint, example]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: tfstack/go.mod
+      - run: make dist VERSION="${GITHUB_REF_NAME#tfstack/}"
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes --title "$GITHUB_REF_NAME"
+        env:
+          GH_TOKEN: ${{ github.token }}
