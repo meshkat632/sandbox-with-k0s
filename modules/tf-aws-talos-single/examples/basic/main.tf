@@ -1,0 +1,24 @@
+provider "aws" {
+  region = "eu-central-1"
+}
+
+module "talos_single" {
+  source = "../../"
+
+  cluster_name = "tryout-single"
+
+  # Optional overrides:
+  # instance_type    = "t3.xlarge"
+  # disk_size        = 150
+  # allowed_cidr     = "203.0.113.10/32"
+  # talos_semver     = "v1.12.6"   # used to pick the AMI
+}
+
+output "public_ip" {
+  value = module.talos_single.public_ip
+}
+
+output "kubeconfig" {
+  value     = module.talos_single.kubeconfig
+  sensitive = true
+}
