@@ -20,3 +20,9 @@ variable "worker_count" {
   type        = number
   default     = 0
 }
+
+variable "http_ingress_cidrs" {
+  description = "Who may reach ports 80/443 on the nodes (ingress-nginx from examples/basic-k8s). [] closes them"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}

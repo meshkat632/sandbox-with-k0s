@@ -4,6 +4,8 @@ module "talos_single" {
   cluster_name = var.name
   worker_count = var.worker_count
 
+  http_ingress_cidrs = var.http_ingress_cidrs
+
   # Optional overrides:
   # instance_type    = "t3.xlarge"
   # disk_size        = 150

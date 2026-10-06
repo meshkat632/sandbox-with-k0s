@@ -72,6 +72,17 @@ resource "aws_security_group" "talos" {
     cidr_blocks = [local.allowed_cidr]
   }
 
+  dynamic "ingress" {
+    for_each = length(var.http_ingress_cidrs) > 0 ? [80, 443] : []
+    content {
+      description = "HTTP/HTTPS to an ingress controller on the nodes"
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "tcp"
+      cidr_blocks = var.http_ingress_cidrs
+    }
+  }
+
   ingress {
     description = "Node to node (workers, control plane, pod network)"
     from_port   = 0

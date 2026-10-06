@@ -62,6 +62,12 @@ variable "allowed_cidr" {
   default     = null # defaults to your current public IP
 }
 
+variable "http_ingress_cidrs" {
+  description = "CIDRs allowed to reach ports 80 and 443 on the nodes (for an ingress controller). Empty = closed"
+  type        = list(string)
+  default     = []
+}
+
 variable "tags" {
   description = "Extra tags for the instance"
   type        = map(string)

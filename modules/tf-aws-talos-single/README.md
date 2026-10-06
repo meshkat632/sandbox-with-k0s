@@ -10,7 +10,8 @@ plane stays a single node.
 1. Resolves the default VPC + its public subnet
 2. Finds the official Talos AMI for the provider's region + arch (override with `ami_id`)
 3. Creates a locked-down SG (50000 + 6443 from your IP only, all traffic
-   between the nodes themselves)
+   between the nodes themselves; 80 + 443 only for `http_ingress_cidrs`,
+   closed by default)
 4. Launches the instance (gp3 root disk, `disk_size` GiB, auto-assigned public IP)
    plus `worker_count` identical worker instances
 5. Generates Talos cluster secrets
@@ -73,6 +74,29 @@ It waits until every node is Ready, CoreDNS is rolled out and all kube-system
 pods are Ready, then appends a row to `examples/basic/timings.csv`:
 terraform apply seconds, apply -> ready seconds, total, Kubernetes and Talos
 versions, node count. `make timings` prints the recorded runs.
+
+## Cluster add-ons (examples/basic-k8s)
+
+A second Terraform root installs basic components with Helm. It has its own
+state (HCP workspace `talos-single-test-k8s`, local execution) and reads the
+kubeconfig from the `talos-single-test` workspace, so run it after
+`examples/basic` and destroy it first.
+
+    cd examples/basic-k8s
+    terraform init
+    terraform apply
+
+| Component | Namespace | Notes |
+|---|---|---|
+| metrics-server | kube-system | `kubectl top`, HPA. Runs with `--kubelet-insecure-tls` |
+| kube-state-metrics | kube-system | Metrics on `kube-state-metrics:8080`; nothing scrapes them yet |
+| ingress-nginx | ingress-nginx | DaemonSet on host ports 80/443 of every node, default class `nginx` |
+| cert-manager | cert-manager | Controller + CRDs only, no issuers |
+
+ingress-nginx is reachable on any node's public IP once the module's
+`http_ingress_cidrs` allows it. `examples/basic` sets it to `0.0.0.0/0`;
+set it to `[]` to close the ports again. Chart versions are variables in
+`examples/basic-k8s/variables.tf`.
 
 ## Known caveats (read before using beyond a lab)
 
