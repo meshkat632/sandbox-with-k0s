@@ -71,16 +71,6 @@ resource "aws_security_group" "talos" {
     cidr_blocks = [local.allowed_cidr]
   }
 
-  # TEMPORARY: open to the world on every port. Remove this rule to go back
-  # to the allowed_cidr-only rules above.
-  ingress {
-    description = "TEMP: all inbound from anywhere"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   egress {
     description = "All outbound (pull images, join endpoints, etc.)"
     from_port   = 0

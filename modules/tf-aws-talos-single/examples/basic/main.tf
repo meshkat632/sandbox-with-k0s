@@ -1,11 +1,7 @@
-provider "aws" {
-  region = "eu-central-1"
-}
-
 module "talos_single" {
   source = "../../"
 
-  cluster_name = "tryout-single"
+  cluster_name = var.name
 
   # Optional overrides:
   # instance_type    = "t3.xlarge"

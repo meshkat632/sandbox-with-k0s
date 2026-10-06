@@ -4,7 +4,6 @@
 # Appends one row per run to timings.csv.
 set -euo pipefail
 
-KUBECONFIG_FILE="${KUBECONFIG_FILE:-kubeconfig.yaml}"
 TIMINGS_FILE="${TIMINGS_FILE:-timings.csv}"
 READY_TIMEOUT="${READY_TIMEOUT:-600}"
 
@@ -22,8 +21,7 @@ start=$(date +%s)
 terraform apply -auto-approve -input=false
 applied=$(date +%s)
 
-(umask 077; terraform output -raw kubeconfig > "$KUBECONFIG_FILE")
-chmod 600 "$KUBECONFIG_FILE"
+KUBECONFIG_FILE=$(./install_kubeconfig.sh)
 
 echo "Waiting for the cluster to become ready (timeout ${READY_TIMEOUT}s)..."
 until cluster_ready >/dev/null 2>&1; do
