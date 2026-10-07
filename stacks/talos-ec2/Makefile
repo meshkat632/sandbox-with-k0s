@@ -23,7 +23,7 @@ WAIT_SECONDS ?= 300
 # Talos client config, published by the talos module
 TALOSCONFIG_PARAM ?= /talos/$(CLUSTER)/talosconfig
 
-.PHONY: help kubeconfig nodes metrics-server traefik cert-manager wildcard-cert error-pages letsencrypt hello-world local-storage addons
+.PHONY: help kubeconfig nodes metrics-server traefik cert-manager wildcard-cert error-pages letsencrypt hello-world local-storage node-exporter addons
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -81,8 +81,11 @@ hello-world: kubeconfig ## Deploy a hello-world page with an Ingress and a Let's
 local-storage: kubeconfig ## Install the default StorageClass on the fixed-size data disk
 	@./addons/local-storage.sh
 
+node-exporter: kubeconfig ## Install the Prometheus node exporter (node metrics on port 9100)
+	@./addons/node-exporter.sh
+
 # In dependency order: the certificates and pages need Traefik and cert-manager
-ADDONS := metrics-server local-storage traefik cert-manager wildcard-cert error-pages letsencrypt hello-world
+ADDONS := metrics-server node-exporter local-storage traefik cert-manager wildcard-cert error-pages letsencrypt hello-world
 
 addons: kubeconfig ## Install all add-ons, in order
 	@for addon in $(ADDONS); do
