@@ -17,6 +17,9 @@ REGION  := $(shell sed -n 's/^ *region: *//p' cluster.yaml | head -1)
 KUBECONFIG_DIR ?= $(HOME)/.kube/configs
 KUBECONFIG_OUT := $(KUBECONFIG_DIR)/$(CLUSTER).yaml
 
+# How long make kubeconfig waits for the API server after a fresh apply
+WAIT_SECONDS ?= 300
+
 # Talos client config, published by the talos module
 TALOSCONFIG_PARAM ?= /talos/$(CLUSTER)/talosconfig
 
@@ -38,6 +41,18 @@ kubeconfig: ## Fetch the admin kubeconfig from the instance (Talos API) into ~/.
 	mkdir -p "$(KUBECONFIG_DIR)"
 	install -m 600 "$$tmp/kubeconfig" "$(KUBECONFIG_OUT)"
 	echo "Wrote $(KUBECONFIG_OUT)"
+	# Right after an apply the node is still starting the control plane
+	echo "Waiting for the API server (up to $(WAIT_SECONDS)s)"
+	deadline=$$(( $$(date +%s) + $(WAIT_SECONDS) ))
+	until kubectl --kubeconfig "$(KUBECONFIG_OUT)" --request-timeout=5s get --raw /readyz >/dev/null 2>&1; do
+		if [ "$$(date +%s)" -ge "$$deadline" ]; then
+			echo "ERROR: API server not ready after $(WAIT_SECONDS)s" >&2
+			kubectl --kubeconfig "$(KUBECONFIG_OUT)" --request-timeout=5s get --raw /readyz >&2 || true
+			exit 1
+		fi
+		sleep 5
+	done
+	echo "API server is ready"
 
 nodes: kubeconfig ## kubectl get nodes with the fetched kubeconfig
 	@kubectl --kubeconfig "$(KUBECONFIG_OUT)" get nodes -o wide
