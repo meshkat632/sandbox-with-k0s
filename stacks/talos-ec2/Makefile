@@ -23,7 +23,7 @@ WAIT_SECONDS ?= 300
 # Talos client config, published by the talos module
 TALOSCONFIG_PARAM ?= /talos/$(CLUSTER)/talosconfig
 
-.PHONY: help kubeconfig nodes metrics-server traefik cert-manager wildcard-cert error-pages letsencrypt
+.PHONY: help kubeconfig nodes metrics-server traefik cert-manager wildcard-cert error-pages letsencrypt hello-world
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -74,3 +74,6 @@ error-pages: kubeconfig ## Deploy the default error pages (catch-all 404, opt-in
 
 letsencrypt: kubeconfig ## Create the Let's Encrypt issuers (HTTP-01 through Traefik, needs port 80 open)
 	@./addons/letsencrypt.sh
+
+hello-world: kubeconfig ## Deploy a hello-world page with an Ingress and a Let's Encrypt certificate
+	@./addons/hello-world.sh
