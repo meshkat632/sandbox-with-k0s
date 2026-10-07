@@ -62,6 +62,14 @@ resource "aws_security_group" "talos" {
     }
   }
 
+  ingress {
+    description = "Node to node (control plane, workers, pod network)"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    self        = true
+  }
+
   egress {
     description = "All outbound (pull images, etc.)"
     from_port   = 0

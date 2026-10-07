@@ -2,6 +2,15 @@ output "public_ip" {
   value = module.talos.public_ip
 }
 
+output "worker_public_ips" {
+  value = module.workers.public_ips
+}
+
+output "worker_private_ips" {
+  description = "Node addresses of the workers for talosctl -n"
+  value       = module.workers.private_ips
+}
+
 output "allowed_cidr" {
   description = "Your IP, the only source allowed to reach the Talos/Kubernetes APIs"
   value       = module.networking.allowed_cidr

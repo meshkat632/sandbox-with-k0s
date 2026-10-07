@@ -30,6 +30,14 @@ locals {
   # too small to run Talos.
   free_tier_instance_types = ["c7i-flex.large", "m7i-flex.large", "t3.small", "t4g.small"]
 
+  # Workers (optional): same Talos and Kubernetes versions as the control plane
+  workers              = try(local.spec.workers, {})
+  worker_count         = try(local.workers.replicas, 0)
+  worker_machine       = try(local.workers.machineTemplate.spec, {})
+  worker_instance_type = try(local.worker_machine.instanceType, local.instance_type)
+  worker_disk_size     = try(local.worker_machine.rootVolume.size, 20)
+  worker_arch          = can(regex("^[a-z]+[0-9]+[a-z]*g[a-z]*\\.", local.worker_instance_type)) ? "arm64" : "amd64"
+
   # Add-ons to install: a list of script names from addons/ (missing = none)
   addons_raw   = try(local.spec.addons.install, null)
   addons       = local.addons_raw == null ? [] : try([for a in local.addons_raw : tostring(a)], [])
@@ -60,6 +68,14 @@ resource "terraform_data" "cluster_spec" {
     precondition {
       condition     = can(regex("^v[0-9]+\\.[0-9]+\\.[0-9]+$", local.talos_semver))
       error_message = "cluster.yaml: controlPlaneConfig.talosVersion must be an exact release like v1.11.2."
+    }
+    precondition {
+      condition     = can(local.worker_count >= 0 && floor(local.worker_count) == local.worker_count)
+      error_message = "cluster.yaml: workers.replicas must be a whole number >= 0."
+    }
+    precondition {
+      condition     = local.worker_count == 0 || contains(local.free_tier_instance_types, local.worker_instance_type)
+      error_message = "cluster.yaml: workers instanceType must be one of: ${join(", ", local.free_tier_instance_types)}."
     }
     precondition {
       condition     = local.addons_raw == null || can([for a in local.addons_raw : tostring(a)])
@@ -102,6 +118,30 @@ module "talos" {
   tags           = local.tags
 
   config_patches = local.config_patches
+}
+
+# Extra worker nodes (workers.replicas in cluster.yaml, 0 = single node)
+module "workers" {
+  source = "./modules/workers"
+
+  worker_count = local.worker_count
+
+  subnet_id         = module.networking.subnet_id
+  security_group_id = module.networking.security_group_id
+
+  control_plane_private_ip = module.talos.private_ip
+  machine_secrets          = module.talos.machine_secrets
+  client_configuration     = module.talos.client_configuration
+
+  cluster_name       = local.cluster_name
+  talos_version      = local.talos_version
+  talos_semver       = local.talos_semver
+  kubernetes_version = local.kubernetes_version
+
+  arch          = local.worker_arch
+  instance_type = local.worker_instance_type
+  disk_size     = local.worker_disk_size
+  tags          = local.tags
 }
 
 # ---------------------------------------------------------------------------

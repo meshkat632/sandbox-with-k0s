@@ -2,19 +2,20 @@
 
 A single-node [Talos](https://www.talos.dev) Kubernetes cluster on one EC2
 instance, sized to fit the AWS free tier. The node is the control plane and
-also runs the workloads.
+also runs the workloads. Extra worker nodes are optional.
 
 Everything is configured in one file, [`cluster.yaml`](cluster.yaml), a
 CAPI-style `Cluster` object. `terraform apply` creates:
 
 - a security group in the default VPC: the Talos API (50000) and the
   Kubernetes API (6443) are open to **your current public IP only**; 80/443
-  are open to `httpIngress.allowedCIDRBlocks`;
+  are open to `httpIngress.allowedCIDRBlocks`; nodes reach each other freely;
 - the EC2 instance from the official Talos AMI, with an ephemeral public IP;
 - a separate gp3 data disk (`dataVolume.size`), which Talos mounts at
   `/var/mnt/local-storage` for persistent volumes;
 - the Talos machine config, the bootstrap, and the Talos client config
   published to SSM Parameter Store (`/talos/<cluster name>/talosconfig`);
+- `workers.replicas` extra worker instances that join the cluster;
 - the add-ons listed under `addons.install`, by running `make addons`.
 
 State is local (`terraform.tfstate`, not committed).
@@ -66,10 +67,35 @@ talosctl --talosconfig talosconfig dashboard
 | `...rootVolume.size` / `...dataVolume.size` | Disk sizes in GiB; together at most 30. `dataVolume.size: 0` = no data disk |
 | `spec.controlPlane.controlPlaneConfig.talosVersion` | Exact Talos release (AMI and installer) |
 | `spec.controlPlane.controlPlaneConfig.strategicPatches` | Optional extra Talos machine-config patches |
+| `spec.workers.replicas` | Number of extra worker nodes; `0` = single node |
+| `spec.workers.machineTemplate.spec` | `instanceType` and `rootVolume.size` of the workers |
 | `spec.addons.install` | Add-ons to install (see below) |
 
 The plan fails on a non-free-tier instance type, more than 30 GiB of disk, or
 an unknown add-on name.
+
+## Worker nodes
+
+Set `spec.workers.replicas` in `cluster.yaml` and run `terraform apply`. Each
+worker ([`modules/workers`](modules/workers)) is an instance from the Talos AMI
+that gets a worker config and joins through the control plane's private IP;
+`make nodes` shows it after about a minute. Workers run the same Talos and
+Kubernetes versions as the control plane and may use another instance type or
+architecture.
+
+- **Scaling down** terminates the highest-numbered workers without draining
+  them. Their Node objects stay behind as `NotReady`: remove them with
+  `kubectl delete node <name>`.
+- **Cost:** every worker is one more instance and disk. The free-tier disk
+  check only counts the control plane's disks.
+- **Ingress:** Traefik runs on every node, so 80/443 also answer on the
+  workers' public IPs (`terraform output worker_public_ips`). The sslip.io
+  host names still point at the control plane.
+- **Storage:** only the control plane has the data disk. A volume for a pod
+  that runs on a worker is a directory on that worker's system disk, and it is
+  lost when the worker is removed.
+- **talosctl:** the published client config targets the control plane. For a
+  worker add `-n <private ip>` (`terraform output worker_private_ips`).
 
 ## Add-ons
 
