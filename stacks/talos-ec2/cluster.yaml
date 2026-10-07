@@ -35,3 +35,9 @@ spec:
           size: 10                # GiB; 0 = no data disk
     controlPlaneConfig:
       talosVersion: v1.11.2
+
+  # Cluster add-ons (addons/*.sh: ingress, certificates, storage, monitoring).
+  # true = terraform apply runs `make addons` once the cluster is up, and again
+  # when an add-on file or the node's public IP changes.
+  addons:
+    install: true

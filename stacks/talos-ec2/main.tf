@@ -30,6 +30,11 @@ locals {
   # too small to run Talos.
   free_tier_instance_types = ["c7i-flex.large", "m7i-flex.large", "t3.small", "t4g.small"]
 
+  install_addons = try(local.spec.addons.install, false)
+
+  # Everything `make addons` runs or reads
+  addon_files = setunion(fileset(path.module, "addons/**"), ["Makefile"])
+
   # Optional, not in cluster.yaml by default: controlPlaneConfig.strategicPatches
   config_patches = [for p in coalesce(try(local.talos.strategicPatches, null), []) : yamlencode(p)]
 }
@@ -86,4 +91,29 @@ module "talos" {
   tags           = local.tags
 
   config_patches = local.config_patches
+}
+
+# ---------------------------------------------------------------------------
+# Add-ons: `make addons` on the machine that runs Terraform, which therefore
+# needs aws, talosctl, kubectl, helm and git. The scripts are idempotent.
+# Terraform only tracks whether they ran - not what is installed in the
+# cluster - and destroy does not uninstall them (the node goes away anyway).
+# ---------------------------------------------------------------------------
+resource "terraform_data" "addons" {
+  count = local.install_addons ? 1 : 0
+
+  # Run again when an add-on changes, or when the node gets a new public IP
+  # (the sslip.io host names and the wildcard certificate contain it)
+  triggers_replace = {
+    public_ip = module.talos.public_ip
+    files     = sha256(join("", [for f in sort(local.addon_files) : filesha256("${path.module}/${f}")]))
+  }
+
+  provisioner "local-exec" {
+    command     = "make addons"
+    working_dir = path.module
+  }
+
+  # The whole module: bootstrap, the published talosconfig and the data disk
+  depends_on = [module.talos]
 }
