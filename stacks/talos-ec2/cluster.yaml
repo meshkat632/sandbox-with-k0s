@@ -36,8 +36,23 @@ spec:
     controlPlaneConfig:
       talosVersion: v1.11.2
 
-  # Cluster add-ons (addons/*.sh: ingress, certificates, storage, monitoring).
-  # true = terraform apply runs `make addons` once the cluster is up, and again
-  # when an add-on file or the node's public IP changes.
+  # Cluster add-ons: one entry per script in addons/. terraform apply (and
+  # `make addons`) installs the listed ones, always in dependency order, once
+  # the cluster is up - and again when the list, an add-on file or the node's
+  # public IP changes. Comment an entry out to skip it; [] installs nothing.
+  # Removing an entry does not uninstall the add-on.
   addons:
-    install: true
+    install:
+      - metrics-server      # kubectl top, HPA
+      - node-exporter       # node metrics
+      - kube-state-metrics  # object state metrics
+      - local-storage       # default StorageClass on the data disk
+      - prometheus          # needs local-storage
+      - loki                # needs local-storage; includes the Alloy log collector
+      - traefik             # ingress controller on 80/443
+      - cert-manager
+      - wildcard-cert       # needs traefik, cert-manager
+      - error-pages         # needs traefik
+      - letsencrypt         # needs traefik, cert-manager
+      - hello-world         # needs traefik, letsencrypt
+      - grafana             # needs local-storage, traefik, letsencrypt

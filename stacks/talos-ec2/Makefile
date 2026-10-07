@@ -98,10 +98,21 @@ grafana: kubeconfig ## Install Grafana (Prometheus + Loki datasources) with an I
 
 # In dependency order: Prometheus, Loki and Grafana need the StorageClass; the
 # certificates, pages and Grafana's Ingress need Traefik and cert-manager
-ADDONS := metrics-server node-exporter kube-state-metrics local-storage prometheus loki traefik cert-manager wildcard-cert error-pages letsencrypt hello-world grafana
+ALL_ADDONS := metrics-server node-exporter kube-state-metrics local-storage prometheus loki traefik cert-manager wildcard-cert error-pages letsencrypt hello-world grafana
 
-addons: kubeconfig ## Install all add-ons, in order
-	@for addon in $(ADDONS); do
+# The selection: spec.addons.install in cluster.yaml (one "- name" per line),
+# or make addons ADDONS="traefik cert-manager"
+ADDONS ?= $(shell sed -n '/^ *install:/,/^ *[a-zA-Z]/s/^ *- *\([a-z-]*\).*/\1/p' cluster.yaml)
+
+addons: kubeconfig ## Install the add-ons selected in cluster.yaml, in dependency order
+	@unknown="$(filter-out $(ALL_ADDONS),$(ADDONS))"
+	if [ -n "$$unknown" ]; then
+		echo "ERROR: unknown add-on: $$unknown (known: $(ALL_ADDONS))" >&2
+		exit 1
+	fi
+	selected="$(filter $(ADDONS),$(ALL_ADDONS))"
+	[ -n "$$selected" ] || echo "No add-ons selected in cluster.yaml"
+	for addon in $$selected; do
 		echo
 		echo "### $$addon"
 		./addons/$$addon.sh
