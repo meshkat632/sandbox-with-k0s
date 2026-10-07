@@ -102,6 +102,18 @@ data "talos_machine_configuration" "worker" {
           image = "ghcr.io/siderolabs/installer:${var.talos_semver}"
           disk  = "/dev/nvme0n1"
         }
+        # Workers are tainted too: a pod runs here only if it tolerates
+        # cluster.local/role=worker (and selects the label to stay off the
+        # control plane). The taint is set when the kubelet registers,
+        # because a worker may not change its own taints afterwards.
+        nodeLabels = {
+          "cluster.local/role" = "worker"
+        }
+        kubelet = {
+          extraArgs = {
+            "register-with-taints" = "cluster.local/role=worker:NoSchedule"
+          }
+        }
       }
     }),
   ], var.config_patches)

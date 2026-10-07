@@ -1,5 +1,6 @@
 # Talos cluster on EC2: one control plane node, or three behind a load
-# balancer. Control plane nodes also run workloads.
+# balancer. Every node is tainted, so a pod only runs where it asks to: see
+# "Scheduling" in the README.
 # CAPI-style: infrastructure ~ AWSCluster, controlPlane ~ TalosControlPlane.
 apiVersion: cluster.local/v1alpha1
 kind: Cluster
@@ -27,7 +28,7 @@ spec:
     # 1, 3 or 5 (etcd needs an odd number). With 3, one node may fail. More
     # than 1 is beyond the free tier. Do not lower it on a running cluster:
     # the removed nodes are not taken out of etcd first.
-    replicas: 3
+    replicas: 1
     version: v1.34.1              # Kubernetes
     machineTemplate:
       spec:
@@ -36,7 +37,7 @@ spec:
         #   m7i-flex.large  2 vCPU / 8 GiB
         #   t3.small        2 vCPU / 2 GiB   (bare minimum)
         #   t4g.small       2 vCPU / 2 GiB   (arm64, bare minimum)
-        instanceType: c7i-flex.large
+        instanceType: m7i-flex.large
         rootVolume:
           size: 20                # GiB
         # Separate disk per node for persistent volumes (default StorageClass,
@@ -52,7 +53,7 @@ spec:
   # versions of the control plane. Every worker is one more instance and disk,
   # beyond what the free tier covers for the control plane.
   workers:
-    replicas: 0
+    replicas: 3
     machineTemplate:
       spec:
         instanceType: c7i-flex.large   # same choices as the control plane

@@ -24,9 +24,19 @@ spec:
                 name: {{ $.Values.gateway.name | quote }}
                 namespace: {{ $.Values.gateway.namespace | quote }}
                 sectionName: {{ $.Values.gateway.sectionName | quote }}
+            {{- with $.Values.solverPodSpec }}
+            podTemplate:
+              spec:
+                {{- toYaml . | nindent 16 }}
+            {{- end }}
           {{- else if eq $.Values.solver "ingress" }}
           ingress:
             ingressClassName: {{ $.Values.ingressClassName | quote }}
+            {{- with $.Values.solverPodSpec }}
+            podTemplate:
+              spec:
+                {{- toYaml . | nindent 16 }}
+            {{- end }}
           {{- else }}
           {{- fail "solver must be ingress or gateway" }}
           {{- end }}

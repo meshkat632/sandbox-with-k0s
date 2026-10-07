@@ -153,9 +153,10 @@ data "talos_machine_configuration" "this" {
 
   config_patches = concat([
     yamlencode({
-      # Control plane nodes also run workloads
+      # Control plane nodes keep their node-role.kubernetes.io/control-plane
+      # NoSchedule taint: only pods that tolerate it run here
       cluster = {
-        allowSchedulingOnControlPlanes = true
+        allowSchedulingOnControlPlanes = false
       }
       # Pin the installer to the AMI's Talos release and the Nitro root disk
       # (the provider default is its own bundled version on /dev/sda)
@@ -163,6 +164,9 @@ data "talos_machine_configuration" "this" {
         install = {
           image = "ghcr.io/siderolabs/installer:${var.talos_semver}"
           disk  = "/dev/nvme0n1"
+        }
+        nodeLabels = {
+          "cluster.local/role" = "control-plane"
         }
       }
     }),

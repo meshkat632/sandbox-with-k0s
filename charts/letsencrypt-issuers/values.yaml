@@ -13,6 +13,10 @@ gateway:
   # Listener the solver routes attach to (plain HTTP on port 80)
   sectionName: http
 
+# Pod spec fields for the HTTP-01 solver pods cert-manager starts per
+# challenge, e.g. nodeSelector and tolerations on a cluster with tainted nodes
+solverPodSpec: {}
+
 # One ClusterIssuer per entry, named letsencrypt-<key>
 servers:
   staging: https://acme-staging-v02.api.letsencrypt.org/directory
