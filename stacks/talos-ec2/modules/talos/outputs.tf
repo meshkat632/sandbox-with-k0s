@@ -1,10 +1,22 @@
-output "public_ip" {
-  value = aws_instance.talos.public_ip
+output "public_ips" {
+  description = "Ephemeral public IPs of the control plane nodes (Talos API endpoints)"
+  value       = aws_instance.talos[*].public_ip
 }
 
-output "private_ip" {
-  description = "Workers join the cluster through this address"
-  value       = aws_instance.talos.private_ip
+output "private_ips" {
+  description = "Node addresses of the control plane for talosctl -n"
+  value       = aws_instance.talos[*].private_ip
+}
+
+output "cluster_endpoint" {
+  description = "Kubernetes API URL in the kubeconfig"
+  value       = local.cluster_endpoint
+}
+
+# Workers join through the load balancer. Without one they use the private IP
+# of the control plane node: its public IP is not open to them.
+output "worker_endpoint" {
+  value = var.load_balancer_enabled ? local.cluster_endpoint : "https://${aws_instance.talos[0].private_ip}:6443"
 }
 
 # For the workers module: the same cluster secrets and Talos API client

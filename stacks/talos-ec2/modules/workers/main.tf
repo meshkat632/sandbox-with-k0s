@@ -18,6 +18,9 @@ locals {
   # t3/t4g default to "unlimited" credits, which bills for sustained CPU
   # above baseline. "standard" throttles instead.
   burstable = startswith(var.instance_type, "t")
+
+  lb_node_count = var.load_balancer_enabled ? var.worker_count : 0
+  lb_ports      = [6443, 80, 443]
 }
 
 # ---------------------------------------------------------------------------
@@ -50,14 +53,42 @@ resource "aws_instance" "worker" {
 }
 
 # ---------------------------------------------------------------------------
-# 3. Talos: worker config -> apply. The node then joins on its own.
+# 3. Load balancer (optional): the ingress controller runs on every node, so
+#    workers are HTTP/HTTPS targets too
 # ---------------------------------------------------------------------------
-# Workers reach the control plane on its private IP: inside the VPC that is
-# covered by the node-to-node rule of the security group, the public IP is not.
+resource "aws_lb_target_group_attachment" "http" {
+  count = local.lb_node_count
+
+  target_group_arn = var.target_group_arns["http"]
+  target_id        = aws_instance.worker[count.index].id
+}
+
+resource "aws_lb_target_group_attachment" "https" {
+  count = local.lb_node_count
+
+  target_group_arn = var.target_group_arns["https"]
+  target_id        = aws_instance.worker[count.index].id
+}
+
+# The workers reach the load balancer's public IP from their own public IPs
+resource "aws_vpc_security_group_ingress_rule" "lb_from_node" {
+  count = local.lb_node_count * length(local.lb_ports)
+
+  security_group_id = var.load_balancer_security_group_id
+  description       = "From worker ${floor(count.index / length(local.lb_ports))}"
+  ip_protocol       = "tcp"
+  from_port         = local.lb_ports[count.index % length(local.lb_ports)]
+  to_port           = local.lb_ports[count.index % length(local.lb_ports)]
+  cidr_ipv4         = "${aws_instance.worker[floor(count.index / length(local.lb_ports))].public_ip}/32"
+}
+
+# ---------------------------------------------------------------------------
+# 4. Talos: worker config -> apply. The node then joins on its own.
+# ---------------------------------------------------------------------------
 data "talos_machine_configuration" "worker" {
   cluster_name       = var.cluster_name
   machine_type       = "worker"
-  cluster_endpoint   = "https://${var.control_plane_private_ip}:6443"
+  cluster_endpoint   = var.cluster_endpoint
   machine_secrets    = var.machine_secrets
   talos_version      = var.talos_version
   kubernetes_version = var.kubernetes_version

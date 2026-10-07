@@ -12,9 +12,26 @@ variable "security_group_id" {
   type = string
 }
 
+variable "load_balancer_enabled" {
+  description = "Register the workers as ingress targets of the load balancer"
+  type        = bool
+  default     = false
+}
+
+variable "load_balancer_security_group_id" {
+  type    = string
+  default = null
+}
+
+variable "target_group_arns" {
+  description = "Load balancer target groups by name: api, http, https"
+  type        = map(string)
+  default     = {}
+}
+
 # --- From the talos module --------------------------------------------------
-variable "control_plane_private_ip" {
-  description = "Private IP of the control plane node; workers join the cluster through it"
+variable "cluster_endpoint" {
+  description = "Kubernetes API URL the workers join through"
   type        = string
 }
 

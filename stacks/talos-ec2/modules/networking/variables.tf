@@ -9,6 +9,12 @@ variable "http_ingress_cidrs" {
   default     = []
 }
 
+variable "load_balancer_enabled" {
+  description = "Create a Network Load Balancer with a fixed IP for the Kubernetes API (6443) and the ingress (80/443)"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Tags added to every resource"
   type        = map(string)

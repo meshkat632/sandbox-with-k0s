@@ -19,6 +19,10 @@ locals {
   talos_version      = regex("^v[0-9]+\\.[0-9]+", local.talos_semver)
   kubernetes_version = trimprefix(local.cp.version, "v")
 
+  # Control plane: 1 node, or 3/5 behind a load balancer
+  control_plane_count   = try(local.cp.replicas, 1)
+  load_balancer_enabled = try(local.infra.controlPlaneLoadBalancer.enabled, false)
+
   # Machine
   instance_type  = try(local.machine.instanceType, "c7i-flex.large")
   disk_size      = try(local.machine.rootVolume.size, 20)
@@ -62,7 +66,16 @@ resource "terraform_data" "cluster_spec" {
       error_message = "cluster.yaml: instanceType must be a free-tier type that can run Talos: ${join(", ", local.free_tier_instance_types)}."
     }
     precondition {
-      condition     = local.disk_size + local.data_disk_size <= 30
+      condition     = contains([1, 3, 5], local.control_plane_count)
+      error_message = "cluster.yaml: controlPlane.replicas must be 1, 3 or 5: etcd needs an odd number of members to keep a majority."
+    }
+    precondition {
+      condition     = local.control_plane_count == 1 || local.load_balancer_enabled
+      error_message = "cluster.yaml: more than one control plane node needs infrastructure.controlPlaneLoadBalancer.enabled: true."
+    }
+    # A single node is meant to fit the free tier; several nodes never do
+    precondition {
+      condition     = local.control_plane_count > 1 || local.disk_size + local.data_disk_size <= 30
       error_message = "cluster.yaml: rootVolume.size + dataVolume.size must be <= 30 GiB to stay in the EBS free tier."
     }
     precondition {
@@ -95,9 +108,10 @@ resource "terraform_data" "cluster_spec" {
 module "networking" {
   source = "./modules/networking"
 
-  cluster_name       = local.cluster_name
-  http_ingress_cidrs = coalesce(try(local.infra.network.httpIngress.allowedCIDRBlocks, null), [])
-  tags               = local.tags
+  cluster_name          = local.cluster_name
+  http_ingress_cidrs    = coalesce(try(local.infra.network.httpIngress.allowedCIDRBlocks, null), [])
+  load_balancer_enabled = local.load_balancer_enabled
+  tags                  = local.tags
 }
 
 module "talos" {
@@ -106,10 +120,17 @@ module "talos" {
   subnet_id         = module.networking.subnet_id
   security_group_id = module.networking.security_group_id
 
+  load_balancer_enabled           = local.load_balancer_enabled
+  load_balancer_ip                = module.networking.load_balancer_ip
+  load_balancer_security_group_id = module.networking.load_balancer_security_group_id
+  target_group_arns               = module.networking.target_group_arns
+
   cluster_name       = local.cluster_name
   talos_version      = local.talos_version
   talos_semver       = local.talos_semver
   kubernetes_version = local.kubernetes_version
+
+  control_plane_count = local.control_plane_count
 
   arch           = local.arch
   instance_type  = local.instance_type
@@ -129,9 +150,13 @@ module "workers" {
   subnet_id         = module.networking.subnet_id
   security_group_id = module.networking.security_group_id
 
-  control_plane_private_ip = module.talos.private_ip
-  machine_secrets          = module.talos.machine_secrets
-  client_configuration     = module.talos.client_configuration
+  load_balancer_enabled           = local.load_balancer_enabled
+  load_balancer_security_group_id = module.networking.load_balancer_security_group_id
+  target_group_arns               = module.networking.target_group_arns
+
+  cluster_endpoint     = module.talos.worker_endpoint
+  machine_secrets      = module.talos.machine_secrets
+  client_configuration = module.talos.client_configuration
 
   cluster_name       = local.cluster_name
   talos_version      = local.talos_version
@@ -145,20 +170,20 @@ module "workers" {
 }
 
 # ---------------------------------------------------------------------------
-# Add-ons: `make addons` for the ones listed in cluster.yaml, on the machine that runs Terraform, which therefore
-# needs aws, talosctl, kubectl, helm and git. The scripts are idempotent.
+# Add-ons: `make addons` for the ones listed in cluster.yaml, on the machine
+# that runs Terraform, which therefore needs aws, talosctl, kubectl, helm and git. The scripts are idempotent.
 # Terraform only tracks whether they ran - not what is installed in the
 # cluster - and destroy does not uninstall them (the node goes away anyway).
 # ---------------------------------------------------------------------------
 resource "terraform_data" "addons" {
   count = length(local.addons) > 0 ? 1 : 0
 
-  # Run again when the selection or an add-on changes, or when the node gets a
-  # new public IP (the sslip.io host names and the wildcard certificate contain it)
+  # Run again when the selection or an add-on changes, or when the cluster gets
+  # a new address (the sslip.io host names and the wildcard certificate contain it)
   triggers_replace = {
-    addons    = join(" ", sort(local.addons))
-    public_ip = module.talos.public_ip
-    files     = sha256(join("", [for f in sort(local.addon_files) : filesha256("${path.module}/${f}")]))
+    addons   = join(" ", sort(local.addons))
+    endpoint = module.talos.cluster_endpoint
+    files    = sha256(join("", [for f in sort(local.addon_files) : filesha256("${path.module}/${f}")]))
   }
 
   provisioner "local-exec" {
