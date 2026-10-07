@@ -30,7 +30,10 @@ locals {
   # too small to run Talos.
   free_tier_instance_types = ["c7i-flex.large", "m7i-flex.large", "t3.small", "t4g.small"]
 
-  install_addons = try(local.spec.addons.install, false)
+  # Add-ons to install: a list of script names from addons/ (missing = none)
+  addons_raw   = try(local.spec.addons.install, null)
+  addons       = local.addons_raw == null ? [] : try([for a in local.addons_raw : tostring(a)], [])
+  known_addons = [for f in fileset("${path.module}/addons", "*.sh") : trimsuffix(f, ".sh")]
 
   # Everything `make addons` runs or reads
   addon_files = setunion(fileset(path.module, "addons/**"), ["Makefile"])
@@ -57,6 +60,14 @@ resource "terraform_data" "cluster_spec" {
     precondition {
       condition     = can(regex("^v[0-9]+\\.[0-9]+\\.[0-9]+$", local.talos_semver))
       error_message = "cluster.yaml: controlPlaneConfig.talosVersion must be an exact release like v1.11.2."
+    }
+    precondition {
+      condition     = local.addons_raw == null || can([for a in local.addons_raw : tostring(a)])
+      error_message = "cluster.yaml: addons.install must be a list of add-on names."
+    }
+    precondition {
+      condition     = length(setsubtract(local.addons, local.known_addons)) == 0
+      error_message = "cluster.yaml: unknown add-on in addons.install: ${join(", ", setsubtract(local.addons, local.known_addons))}. Known: ${join(", ", local.known_addons)}."
     }
     precondition {
       condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", local.kubernetes_version))
@@ -94,23 +105,24 @@ module "talos" {
 }
 
 # ---------------------------------------------------------------------------
-# Add-ons: `make addons` on the machine that runs Terraform, which therefore
+# Add-ons: `make addons` for the ones listed in cluster.yaml, on the machine that runs Terraform, which therefore
 # needs aws, talosctl, kubectl, helm and git. The scripts are idempotent.
 # Terraform only tracks whether they ran - not what is installed in the
 # cluster - and destroy does not uninstall them (the node goes away anyway).
 # ---------------------------------------------------------------------------
 resource "terraform_data" "addons" {
-  count = local.install_addons ? 1 : 0
+  count = length(local.addons) > 0 ? 1 : 0
 
-  # Run again when an add-on changes, or when the node gets a new public IP
-  # (the sslip.io host names and the wildcard certificate contain it)
+  # Run again when the selection or an add-on changes, or when the node gets a
+  # new public IP (the sslip.io host names and the wildcard certificate contain it)
   triggers_replace = {
+    addons    = join(" ", sort(local.addons))
     public_ip = module.talos.public_ip
     files     = sha256(join("", [for f in sort(local.addon_files) : filesha256("${path.module}/${f}")]))
   }
 
   provisioner "local-exec" {
-    command     = "make addons"
+    command     = "make addons ADDONS='${join(" ", local.addons)}'"
     working_dir = path.module
   }
 
