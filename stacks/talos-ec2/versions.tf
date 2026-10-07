@@ -6,9 +6,6 @@ terraform {
     http = {
       source = "hashicorp/http"
     }
-    local = {
-      source = "hashicorp/local"
-    }
     talos = {
       source = "siderolabs/talos"
     }

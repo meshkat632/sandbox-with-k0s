@@ -117,3 +117,15 @@ resource "talos_cluster_kubeconfig" "this" {
   node                 = aws_instance.talos.private_ip
   client_configuration = talos_machine_secrets.this.client_configuration
 }
+
+# ---------------------------------------------------------------------------
+# 4. Publish the Talos client config, so the kubeconfig can be fetched from
+#    the instance without Terraform (make kubeconfig). SecureString standard
+#    parameters are free.
+# ---------------------------------------------------------------------------
+resource "aws_ssm_parameter" "talosconfig" {
+  name  = "/talos/${var.cluster_name}/talosconfig"
+  type  = "SecureString"
+  value = data.talos_client_configuration.this.talos_config
+  tags  = var.tags
+}
