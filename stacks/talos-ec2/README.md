@@ -1,10 +1,20 @@
 # talos-ec2
 
-A [Talos](https://www.talos.dev) Kubernetes cluster on EC2. By default it is
-one instance sized to fit the AWS free tier. Optionally it has three control
-plane nodes behind a Network Load Balancer, and extra worker nodes. Every node
-is tainted: a pod only runs where it explicitly asks to (see
-[Scheduling](#scheduling)).
+A [Talos](https://www.talos.dev) Kubernetes cluster on EC2, from a single
+free-tier instance up to three control plane nodes behind a Network Load
+Balancer with extra worker nodes. Every node is tainted: a pod only runs where
+it explicitly asks to (see [Scheduling](#scheduling)).
+
+| Shape | `cluster.yaml` | Cost |
+| ----- | -------------- | ---- |
+| Single node | `controlPlane.replicas: 1`, load balancer off, `workers.replicas: 0` | fits the free tier |
+| Fixed IP | the same with `controlPlaneLoadBalancer.enabled: true` | + load balancer |
+| With workers | `workers.replicas: N` | + one instance and disk per worker |
+| Highly available | `controlPlane.replicas: 3` with the load balancer | 3 instances + load balancer |
+
+The committed [`cluster.yaml`](cluster.yaml) is **not** the free-tier shape: it
+has one control plane node (`m7i-flex.large`) behind the load balancer and
+three workers.
 
 Everything is configured in one file, [`cluster.yaml`](cluster.yaml), a
 CAPI-style `Cluster` object. `terraform apply` creates:
@@ -25,6 +35,15 @@ CAPI-style `Cluster` object. `terraform apply` creates:
 
 State is local (`terraform.tfstate`, not committed).
 
+| Path | Content |
+| ---- | ------- |
+| `cluster.yaml` | The whole configuration |
+| `modules/networking` | Security groups, and the optional load balancer with its Elastic IP |
+| `modules/talos` | Control plane instances, data disks, Talos config and bootstrap |
+| `modules/workers` | Worker instances and their Talos config |
+| `addons/` | One install script per add-on, plus their config files |
+| `Makefile` | `kubeconfig`, `nodes`, one target per add-on, `addons` |
+
 ## Requirements
 
 On the machine that runs Terraform:
@@ -42,13 +61,23 @@ terraform destroy
 
 `make help` lists all targets.
 
+| Output | Meaning |
+| ------ | ------- |
+| `api_endpoint` | Kubernetes API URL: the load balancer if there is one, else the node |
+| `load_balancer_ip` | Fixed IP for the API and the ingress (`null` without a load balancer) |
+| `control_plane_public_ips` / `control_plane_private_ips` | Talos API endpoints / node addresses for `talosctl -n` |
+| `worker_public_ips` / `worker_private_ips` | The same for the workers |
+| `allowed_cidr` | Your IP, the only one allowed on the Talos and Kubernetes APIs |
+| `talosconfig_parameter` | SSM parameter with the Talos client config |
+| `kubeconfig`, `talosconfig` | Sensitive; `make kubeconfig` is the usual way to get a kubeconfig |
+
 ### kubeconfig
 
 `make kubeconfig` writes `~/.kube/configs/<cluster name>.yaml` (override the
 folder with `KUBECONFIG_DIR`). It does not use Terraform: it reads the Talos
-client config from SSM, asks the node for a fresh admin kubeconfig over the
-Talos API, and waits until the API server is ready (`WAIT_SECONDS`, default
-300).
+client config from SSM, asks the first control plane node for a fresh admin
+kubeconfig over the Talos API, and waits until the API server is ready
+(`WAIT_SECONDS`, default 300).
 
 Talos has no SSH. For node-level access use `talosctl` with the same client
 config:
@@ -58,6 +87,9 @@ aws ssm get-parameter --region eu-central-1 --name /talos/talos-dev/talosconfig 
   --with-decryption --query Parameter.Value --output text > talosconfig
 talosctl --talosconfig talosconfig dashboard
 ```
+
+The client config lists every control plane node as an endpoint and targets
+the first one. For another node add `-n <private ip>`.
 
 ## cluster.yaml
 
@@ -123,7 +155,8 @@ spec:
   the node is reconfigured and the kubeconfig and host names change. Treat it
   as a rebuild.
 
-The load balancer also works with `replicas: 1`, to get the fixed IP.
+The load balancer also works with `replicas: 1`, to get the fixed IP: that is
+what the committed `cluster.yaml` does.
 
 ## Scheduling
 
@@ -164,8 +197,13 @@ spec:
 
 The add-ons place themselves ([`addons/lib/placement.sh`](addons/lib/placement.sh)):
 cluster services run on the control plane nodes; Traefik, the node exporter
-and the Alloy log collector run on every node. Kubernetes' own pods (CoreDNS,
-flannel, kube-proxy) tolerate the taints already.
+and the Alloy log collector run on every node. cert-manager's HTTP-01
+challenge pods run on the control plane too, set through the Let's Encrypt
+issuers. Kubernetes' own pods (CoreDNS, flannel, kube-proxy) tolerate the
+taints already.
+
+So the workers stay empty until your own workloads select them. On a cluster
+without workers, a workload has to target the control plane the same way.
 
 The taints are `NoSchedule`: pods that were already running when a node got
 its taint keep running until they are rescheduled.
@@ -178,7 +216,8 @@ that gets a worker config and joins through the load balancer, or through the
 control plane's private IP without one;
 `make nodes` shows it after about a minute. Workers run the same Talos and
 Kubernetes versions as the control plane and may use another instance type or
-architecture.
+architecture. They are tainted like every node: only pods that select and
+tolerate `cluster.local/role=worker` run there (see [Scheduling](#scheduling)).
 
 - **Scaling down** terminates the highest-numbered workers without draining
   them. Their Node objects stay behind as `NotReady`: remove them with
@@ -203,8 +242,12 @@ run on its own (`make traefik`, or `./addons/traefik.sh`). `make addons` and
 order below. `make addons ADDONS="traefik cert-manager"` overrides the list
 for one run.
 
+The committed `cluster.yaml` lists the five core ones: `metrics-server`,
+`local-storage`, `traefik`, `cert-manager` and `letsencrypt`. The rest is
+commented out there; the monitoring stack is the heavy part.
+
 Terraform runs them again when the list, a file under `addons/`, the
-`Makefile` or the node's public IP changes. It only tracks that the scripts
+`Makefile` or the cluster's address changes. It only tracks that the scripts
 ran, not what is installed: removing an entry does not uninstall the add-on
 (`helm uninstall` does).
 
@@ -216,7 +259,7 @@ ran, not what is installed: removing an entry does not uninstall the add-on
 | `local-storage` | Default StorageClass `local-path` on the data disk | data disk |
 | `prometheus` | Prometheus server, 4 Gi volume, 7 days / 3 GB retention | `local-storage` |
 | `loki` | Loki (3 Gi volume, 7 days) and the Alloy collector for pod logs | `local-storage` |
-| `traefik` | Ingress controller on ports 80/443 of the node, default class `traefik` | |
+| `traefik` | Ingress controller on ports 80/443 of every node, default class `traefik` | |
 | `cert-manager` | Controller and CRDs | |
 | `wildcard-cert` | `*.<ip>.sslip.io` certificate from a cluster-local CA, Traefik's default | `traefik`, `cert-manager` |
 | `error-pages` | Catch-all 404 page; opt-in 5xx page (middleware) | `traefik` |
@@ -233,8 +276,10 @@ is needed.
 
 All persistent volumes are directories on the data disk of the node the pod
 runs on. Its size is the limit for all volumes on that node; the size
-requested by a single claim is not enforced. The defaults claim 8 of the 10 GiB (Prometheus 4, Loki 3,
-Grafana 1). The data is on this one node and is destroyed with the stack.
+requested by a single claim is not enforced. The monitoring add-ons claim
+8 GiB of the default 10 (Prometheus 4, Loki 3, Grafana 1), all on the control
+plane. A volume stays on the node it was created on, and the data is
+destroyed with the stack.
 
 ### Certificates
 
@@ -296,9 +341,15 @@ kubectl -n monitoring port-forward svc/loki 3100:3100
   re-runs the add-ons for the new IP.
 - **API access follows your IP.** If your own public IP changes, run
   `terraform apply` to update the security group.
-- **80/443 are open to the internet** with the default `cluster.yaml`: the
-  hello-world page, the 404 page and Grafana's login page are public.
+- **80/443 are open to the internet** with the committed `cluster.yaml`.
+  Whatever has an Ingress is public: Traefik's 404 for unknown hosts, and the
+  hello-world page and Grafana's login page if those add-ons are installed.
 - **Secrets in AWS and in state.** The Talos client config in SSM gives full
   control of the node, and `terraform.tfstate` holds the cluster secrets.
-- **Small node.** With all add-ons, a `c7i-flex.large` (4 GiB) runs at about
-  two thirds of its memory.
+- **All add-ons run on the control plane.** With every add-on installed, a
+  4 GiB node (`c7i-flex.large`) ran at two thirds to three quarters of its
+  memory; `m7i-flex.large` has 8 GiB.
+- **The free-tier checks are narrow.** The plan only accepts the listed
+  instance types, and limits the disks of a single control plane node to
+  30 GiB. It does not stop you from adding the load balancer, workers or more
+  control plane nodes, which all cost money.
