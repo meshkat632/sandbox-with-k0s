@@ -12,7 +12,9 @@ spec:
       ManagedBy: terraform
     network:
       httpIngress:
-        allowedCIDRBlocks: []     # 80/443 for an ingress controller; [] = closed
+        # 80/443 for the ingress controller; [] = closed. Open to everyone so
+        # Let's Encrypt can reach the HTTP-01 challenge.
+        allowedCIDRBlocks: ["0.0.0.0/0"]
 
   controlPlane:
     version: v1.34.1              # Kubernetes
