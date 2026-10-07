@@ -55,15 +55,15 @@ spec:
   addons:
     install:
       - metrics-server      # kubectl top, HPA
-      - node-exporter       # node metrics
-      - kube-state-metrics  # object state metrics
+      #- node-exporter       # node metrics
+      #- kube-state-metrics  # object state metrics
       - local-storage       # default StorageClass on the data disk
-      - prometheus          # needs local-storage
-      - loki                # needs local-storage; includes the Alloy log collector
+      #- prometheus          # needs local-storage
+      #- loki                # needs local-storage; includes the Alloy log collector
       - traefik             # ingress controller on 80/443
       - cert-manager
-      - wildcard-cert       # needs traefik, cert-manager
-      - error-pages         # needs traefik
+      #- wildcard-cert       # needs traefik, cert-manager
+      #- error-pages         # needs traefik
       - letsencrypt         # needs traefik, cert-manager
-      - hello-world         # needs traefik, letsencrypt
-      - grafana             # needs local-storage, traefik, letsencrypt
+      #- hello-world         # needs traefik, letsencrypt
+      #- grafana             # needs local-storage, traefik, letsencrypt
