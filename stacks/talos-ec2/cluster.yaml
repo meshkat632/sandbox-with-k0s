@@ -36,6 +36,17 @@ spec:
     controlPlaneConfig:
       talosVersion: v1.11.2
 
+  # Extra worker nodes (0 = single node). They use the Talos and Kubernetes
+  # versions of the control plane. Every worker is one more instance and disk,
+  # beyond what the free tier covers for the control plane.
+  workers:
+    replicas: 0
+    machineTemplate:
+      spec:
+        instanceType: c7i-flex.large   # same choices as the control plane
+        rootVolume:
+          size: 20                     # GiB
+
   # Cluster add-ons: one entry per script in addons/. terraform apply (and
   # `make addons`) installs the listed ones, always in dependency order, once
   # the cluster is up - and again when the list, an add-on file or the node's
