@@ -48,6 +48,12 @@ variable "disk_size" {
   type        = number
 }
 
+variable "data_disk_size" {
+  description = "Size in GiB of the separate disk for persistent volumes, mounted at /var/mnt/local-storage. 0 = none"
+  type        = number
+  default     = 0
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

@@ -27,6 +27,11 @@ spec:
         #   t4g.small       2 vCPU / 2 GiB   (arm64, bare minimum)
         instanceType: c7i-flex.large
         rootVolume:
-          size: 20                # GiB, max 30 to stay in free tier
+          size: 20                # GiB
+        # Separate disk for persistent volumes (default StorageClass, see
+        # addons/local-storage.sh). Its size is the fixed limit for all volumes
+        # together. Root + data must be <= 30 GiB to stay in the free tier.
+        dataVolume:
+          size: 10                # GiB; 0 = no data disk
     controlPlaneConfig:
       talosVersion: v1.11.2

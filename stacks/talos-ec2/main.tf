@@ -20,9 +20,10 @@ locals {
   kubernetes_version = trimprefix(local.cp.version, "v")
 
   # Machine
-  instance_type = try(local.machine.instanceType, "c7i-flex.large")
-  disk_size     = try(local.machine.rootVolume.size, 20)
-  arch          = can(regex("^[a-z]+[0-9]+[a-z]*g[a-z]*\\.", local.instance_type)) ? "arm64" : "amd64"
+  instance_type  = try(local.machine.instanceType, "c7i-flex.large")
+  disk_size      = try(local.machine.rootVolume.size, 20)
+  data_disk_size = try(local.machine.dataVolume.size, 0)
+  arch           = can(regex("^[a-z]+[0-9]+[a-z]*g[a-z]*\\.", local.instance_type)) ? "arm64" : "amd64"
 
   # Free-tier eligible (accounts created on/after 2025-07-15) AND big enough
   # for a Talos control plane. t3.micro / t4g.micro (1 GiB) are free but
@@ -45,8 +46,8 @@ resource "terraform_data" "cluster_spec" {
       error_message = "cluster.yaml: instanceType must be a free-tier type that can run Talos: ${join(", ", local.free_tier_instance_types)}."
     }
     precondition {
-      condition     = local.disk_size <= 30
-      error_message = "cluster.yaml: rootVolume.size must be <= 30 GiB to stay in the EBS free tier."
+      condition     = local.disk_size + local.data_disk_size <= 30
+      error_message = "cluster.yaml: rootVolume.size + dataVolume.size must be <= 30 GiB to stay in the EBS free tier."
     }
     precondition {
       condition     = can(regex("^v[0-9]+\\.[0-9]+\\.[0-9]+$", local.talos_semver))
@@ -78,10 +79,11 @@ module "talos" {
   talos_semver       = local.talos_semver
   kubernetes_version = local.kubernetes_version
 
-  arch          = local.arch
-  instance_type = local.instance_type
-  disk_size     = local.disk_size
-  tags          = local.tags
+  arch           = local.arch
+  instance_type  = local.instance_type
+  disk_size      = local.disk_size
+  data_disk_size = local.data_disk_size
+  tags           = local.tags
 
   config_patches = local.config_patches
 }
