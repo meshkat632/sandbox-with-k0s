@@ -1,4 +1,5 @@
-# Single-node Talos cluster on EC2 (control plane also runs workloads).
+# Talos cluster on EC2: one control plane node, or three behind a load
+# balancer. Control plane nodes also run workloads.
 # CAPI-style: infrastructure ~ AWSCluster, controlPlane ~ TalosControlPlane.
 apiVersion: cluster.local/v1alpha1
 kind: Cluster
@@ -15,8 +16,18 @@ spec:
         # 80/443 for the ingress controller; [] = closed. Open to everyone so
         # Let's Encrypt can reach the HTTP-01 challenge.
         allowedCIDRBlocks: ["0.0.0.0/0"]
+    # Network Load Balancer with a fixed public IP: the Kubernetes API (6443)
+    # goes to the control plane nodes, HTTP/HTTPS (80/443) to every node.
+    # Required for more than one control plane node. Not free: roughly
+    # $16-20 a month plus traffic.
+    controlPlaneLoadBalancer:
+      enabled: true
 
   controlPlane:
+    # 1, 3 or 5 (etcd needs an odd number). With 3, one node may fail. More
+    # than 1 is beyond the free tier. Do not lower it on a running cluster:
+    # the removed nodes are not taken out of etcd first.
+    replicas: 3
     version: v1.34.1              # Kubernetes
     machineTemplate:
       spec:
@@ -28,9 +39,10 @@ spec:
         instanceType: c7i-flex.large
         rootVolume:
           size: 20                # GiB
-        # Separate disk for persistent volumes (default StorageClass, see
-        # addons/local-storage.sh). Its size is the fixed limit for all volumes
-        # together. Root + data must be <= 30 GiB to stay in the free tier.
+        # Separate disk per node for persistent volumes (default StorageClass,
+        # see addons/local-storage.sh). Its size is the fixed limit for all
+        # volumes on that node. With a single node, root + data must be
+        # <= 30 GiB to stay in the free tier.
         dataVolume:
           size: 10                # GiB; 0 = no data disk
     controlPlaneConfig:

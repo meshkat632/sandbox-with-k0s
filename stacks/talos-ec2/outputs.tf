@@ -1,5 +1,21 @@
-output "public_ip" {
-  value = module.talos.public_ip
+output "api_endpoint" {
+  description = "Kubernetes API URL: the load balancer if there is one, else the node"
+  value       = module.talos.cluster_endpoint
+}
+
+output "load_balancer_ip" {
+  description = "Fixed public IP for the API and the ingress (null without a load balancer)"
+  value       = module.networking.load_balancer_ip
+}
+
+output "control_plane_public_ips" {
+  description = "Ephemeral public IPs of the control plane nodes (Talos API endpoints)"
+  value       = module.talos.public_ips
+}
+
+output "control_plane_private_ips" {
+  description = "Node addresses of the control plane for talosctl -n"
+  value       = module.talos.private_ips
 }
 
 output "worker_public_ips" {
