@@ -10,8 +10,8 @@
 # Uses ~/.kube/configs/<cluster name>.yaml (run `make kubeconfig` first).
 # Defaults can also be set via env: KUBECONFIG_DIR, CHART_VERSION.
 #
-# 80/443 are closed in the security group by default: open them in cluster.yaml
-# (spec.infrastructure.network.httpIngress.allowedCIDRBlocks) and terraform apply.
+# Who can reach 80/443 is set in cluster.yaml
+# (spec.infrastructure.network.httpIngress.allowedCIDRBlocks) + terraform apply.
 set -euo pipefail
 
 STACK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
