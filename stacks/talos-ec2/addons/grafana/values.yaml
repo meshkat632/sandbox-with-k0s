@@ -1,0 +1,48 @@
+# Grafana with Prometheus and Loki as datasources. The host name and the
+# certificate issuer of the Ingress are set by grafana.sh.
+
+# UI changes (dashboards, users) survive pod restarts
+persistence:
+  enabled: true
+  size: 1Gi
+
+# The volume is ReadWriteOnce: stop the old pod before starting the new one
+deploymentStrategy:
+  type: Recreate
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus
+        url: http://prometheus-server.monitoring.svc
+        access: proxy
+        isDefault: true
+      - name: Loki
+        type: loki
+        uid: loki
+        url: http://loki.monitoring.svc:3100
+        access: proxy
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+# Downloaded from grafana.com when the pod starts
+dashboards:
+  default:
+    node-exporter-full:
+      gnetId: 1860
+      revision: 45
+      datasource: Prometheus
