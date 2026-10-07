@@ -23,7 +23,7 @@ WAIT_SECONDS ?= 300
 # Talos client config, published by the talos module
 TALOSCONFIG_PARAM ?= /talos/$(CLUSTER)/talosconfig
 
-.PHONY: help kubeconfig nodes metrics-server
+.PHONY: help kubeconfig nodes metrics-server traefik
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -59,3 +59,6 @@ nodes: kubeconfig ## kubectl get nodes with the fetched kubeconfig
 
 metrics-server: kubeconfig ## Install metrics-server (kubectl top, HPA)
 	@./addons/metrics-server.sh
+
+traefik: kubeconfig ## Install Traefik on ports 80/443 of the node (default ingress class)
+	@./addons/traefik.sh
