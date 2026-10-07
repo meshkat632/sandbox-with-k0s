@@ -23,7 +23,7 @@ WAIT_SECONDS ?= 300
 # Talos client config, published by the talos module
 TALOSCONFIG_PARAM ?= /talos/$(CLUSTER)/talosconfig
 
-.PHONY: help kubeconfig nodes metrics-server traefik cert-manager wildcard-cert error-pages letsencrypt hello-world local-storage node-exporter addons
+.PHONY: help kubeconfig nodes metrics-server traefik cert-manager wildcard-cert error-pages letsencrypt hello-world local-storage node-exporter prometheus loki grafana addons
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -84,8 +84,18 @@ local-storage: kubeconfig ## Install the default StorageClass on the fixed-size 
 node-exporter: kubeconfig ## Install the Prometheus node exporter (node metrics on port 9100)
 	@./addons/node-exporter.sh
 
-# In dependency order: the certificates and pages need Traefik and cert-manager
-ADDONS := metrics-server node-exporter local-storage traefik cert-manager wildcard-cert error-pages letsencrypt hello-world
+prometheus: kubeconfig ## Install Prometheus (server only, data on the default StorageClass)
+	@./addons/prometheus.sh
+
+loki: kubeconfig ## Install Loki and the Alloy log collector (pod logs, 7 days)
+	@./addons/loki.sh
+
+grafana: kubeconfig ## Install Grafana (Prometheus + Loki datasources) with an Ingress and a Let's Encrypt certificate
+	@./addons/grafana.sh
+
+# In dependency order: Prometheus, Loki and Grafana need the StorageClass; the
+# certificates, pages and Grafana's Ingress need Traefik and cert-manager
+ADDONS := metrics-server node-exporter local-storage prometheus loki traefik cert-manager wildcard-cert error-pages letsencrypt hello-world grafana
 
 addons: kubeconfig ## Install all add-ons, in order
 	@for addon in $(ADDONS); do
