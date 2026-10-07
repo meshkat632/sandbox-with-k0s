@@ -7,11 +7,6 @@ output "allowed_cidr" {
   value       = module.networking.allowed_cidr
 }
 
-output "kubeconfig_path" {
-  description = "Where the admin kubeconfig is written"
-  value       = local_sensitive_file.kubeconfig.filename
-}
-
 output "kubeconfig" {
   value     = module.talos.kubeconfig
   sensitive = true
@@ -20,4 +15,9 @@ output "kubeconfig" {
 output "talosconfig" {
   value     = module.talos.talosconfig
   sensitive = true
+}
+
+output "talosconfig_parameter" {
+  description = "SSM parameter holding the Talos client config (used by make kubeconfig)"
+  value       = module.talos.talosconfig_parameter
 }

@@ -29,9 +29,6 @@ locals {
   # too small to run Talos.
   free_tier_instance_types = ["c7i-flex.large", "m7i-flex.large", "t3.small", "t4g.small"]
 
-  # One cluster per file, picked up by kubectl from ~/.kube/configs/*.yaml
-  kubeconfig_path = pathexpand("~/.kube/configs/${local.cluster_name}.yaml")
-
   # Optional, not in cluster.yaml by default: controlPlaneConfig.strategicPatches
   config_patches = [for p in coalesce(try(local.talos.strategicPatches, null), []) : yamlencode(p)]
 }
@@ -87,11 +84,4 @@ module "talos" {
   tags          = local.tags
 
   config_patches = local.config_patches
-}
-
-# Admin kubeconfig on the local file system; removed again on destroy
-resource "local_sensitive_file" "kubeconfig" {
-  content         = module.talos.kubeconfig
-  filename        = local.kubeconfig_path
-  file_permission = "0600"
 }

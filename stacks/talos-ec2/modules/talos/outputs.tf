@@ -11,3 +11,7 @@ output "talosconfig" {
   value     = data.talos_client_configuration.this.talos_config
   sensitive = true
 }
+
+output "talosconfig_parameter" {
+  value = aws_ssm_parameter.talosconfig.name
+}
