@@ -1,9 +1,10 @@
 # talos-ec2
 
 A [Talos](https://www.talos.dev) Kubernetes cluster on EC2. By default it is
-one instance sized to fit the AWS free tier, which is the control plane and
-also runs the workloads. Optionally it has three control plane nodes behind a
-Network Load Balancer, and extra worker nodes.
+one instance sized to fit the AWS free tier. Optionally it has three control
+plane nodes behind a Network Load Balancer, and extra worker nodes. Every node
+is tainted: a pod only runs where it explicitly asks to (see
+[Scheduling](#scheduling)).
 
 Everything is configured in one file, [`cluster.yaml`](cluster.yaml), a
 CAPI-style `Cluster` object. `terraform apply` creates:
@@ -123,6 +124,51 @@ spec:
   as a rebuild.
 
 The load balancer also works with `replicas: 1`, to get the fixed IP.
+
+## Scheduling
+
+No node accepts pods by default. Each has a label to select it and a taint
+that keeps everything else away:
+
+| Nodes | Label | Taint |
+| ----- | ----- | ----- |
+| Control plane | `cluster.local/role=control-plane` (and `node-role.kubernetes.io/control-plane`) | `node-role.kubernetes.io/control-plane:NoSchedule` |
+| Workers | `cluster.local/role=worker` | `cluster.local/role=worker:NoSchedule` |
+
+A pod needs **both** a toleration and a node selector. The toleration lets it
+onto the tainted nodes; the selector keeps it off the others. A node selector
+alone leaves the pod `Pending`.
+
+```yaml
+# on the workers
+spec:
+  nodeSelector:
+    cluster.local/role: worker
+  tolerations:
+    - key: cluster.local/role
+      operator: Equal
+      value: worker
+      effect: NoSchedule
+```
+
+```yaml
+# on the control plane
+spec:
+  nodeSelector:
+    cluster.local/role: control-plane
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+```
+
+The add-ons place themselves ([`addons/lib/placement.sh`](addons/lib/placement.sh)):
+cluster services run on the control plane nodes; Traefik, the node exporter
+and the Alloy log collector run on every node. Kubernetes' own pods (CoreDNS,
+flannel, kube-proxy) tolerate the taints already.
+
+The taints are `NoSchedule`: pods that were already running when a node got
+its taint keep running until they are rescheduled.
 
 ## Worker nodes
 

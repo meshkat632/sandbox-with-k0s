@@ -13,6 +13,8 @@
 set -euo pipefail
 
 STACK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/placement.sh
+. "$STACK_DIR/addons/lib/placement.sh"
 CLUSTER="$(sed -n 's/^  name: *//p' "$STACK_DIR/cluster.yaml" | head -1)"
 KUBECONFIG_FILE="${KUBECONFIG_DIR:-$HOME/.kube/configs}/$CLUSTER.yaml"
 CHART_VERSION="${CHART_VERSION:-8.6.0}"
@@ -29,6 +31,8 @@ helm upgrade --install kube-state-metrics kube-state-metrics \
   --repo https://prometheus-community.github.io/helm-charts \
   --version "$CHART_VERSION" \
   --namespace "$NAMESPACE" --create-namespace \
+  --set-json "nodeSelector=$CONTROL_PLANE_SELECTOR" \
+  --set-json "tolerations=$CONTROL_PLANE_TOLERATIONS" \
   --wait --timeout 10m >/dev/null
 
 kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/name=kube-state-metrics

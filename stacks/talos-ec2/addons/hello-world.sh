@@ -16,6 +16,8 @@
 set -euo pipefail
 
 STACK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/placement.sh
+. "$STACK_DIR/addons/lib/placement.sh"
 CHART_DIR="$STACK_DIR/../../charts/nginx-hello-world"
 CLUSTER="$(sed -n 's/^  name: *//p' "$STACK_DIR/cluster.yaml" | head -1)"
 KUBECONFIG_FILE="${KUBECONFIG_DIR:-$HOME/.kube/configs}/$CLUSTER.yaml"
@@ -45,6 +47,8 @@ helm upgrade --install hello-world "$CHART_DIR" \
   --set fullnameOverride=hello-world \
   --set page.title="Hello from $CLUSTER" \
   --set page.message="Served by nginx on the $CLUSTER Talos cluster." \
+  --set-json "nodeSelector=$CONTROL_PLANE_SELECTOR" \
+  --set-json "tolerations=$CONTROL_PLANE_TOLERATIONS" \
   --wait --timeout 5m >/dev/null
 
 # With an issuer, cert-manager fills the secret; without one there is no

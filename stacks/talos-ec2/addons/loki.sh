@@ -21,6 +21,8 @@
 set -euo pipefail
 
 STACK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/placement.sh
+. "$STACK_DIR/addons/lib/placement.sh"
 CONFIG_DIR="$STACK_DIR/addons/loki"
 CLUSTER="$(sed -n 's/^  name: *//p' "$STACK_DIR/cluster.yaml" | head -1)"
 KUBECONFIG_FILE="${KUBECONFIG_DIR:-$HOME/.kube/configs}/$CLUSTER.yaml"
@@ -43,6 +45,8 @@ helm upgrade --install loki loki \
   --version "$LOKI_CHART_VERSION" \
   --namespace "$NAMESPACE" --create-namespace \
   -f "$CONFIG_DIR/values.yaml" \
+  --set-json "singleBinary.nodeSelector=$CONTROL_PLANE_SELECTOR" \
+  --set-json "singleBinary.tolerations=$CONTROL_PLANE_TOLERATIONS" \
   --wait --timeout 10m >/dev/null
 
 echo "==> Installing alloy $ALLOY_CHART_VERSION"
@@ -51,6 +55,7 @@ helm upgrade --install alloy alloy \
   --version "$ALLOY_CHART_VERSION" \
   --namespace "$NAMESPACE" \
   --set-file alloy.configMap.content="$CONFIG_DIR/config.alloy" \
+  --set-json "controller.tolerations=$ALL_NODES_TOLERATIONS" \
   --wait --timeout 10m >/dev/null
 
 kubectl -n "$NAMESPACE" get pods -l 'app.kubernetes.io/name in (loki, alloy)'

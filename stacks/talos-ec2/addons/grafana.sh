@@ -24,6 +24,8 @@
 set -euo pipefail
 
 STACK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/placement.sh
+. "$STACK_DIR/addons/lib/placement.sh"
 CLUSTER="$(sed -n 's/^  name: *//p' "$STACK_DIR/cluster.yaml" | head -1)"
 KUBECONFIG_FILE="${KUBECONFIG_DIR:-$HOME/.kube/configs}/$CLUSTER.yaml"
 CHART_VERSION="${CHART_VERSION:-13.2.8}"
@@ -61,6 +63,8 @@ helm upgrade --install grafana grafana \
   --namespace "$NAMESPACE" --create-namespace \
   -f "$STACK_DIR/addons/grafana/values.yaml" \
   "${dashboards[@]}" \
+  --set-json "nodeSelector=$CONTROL_PLANE_SELECTOR" \
+  --set-json "tolerations=$CONTROL_PLANE_TOLERATIONS" \
   --wait --timeout 10m -f - >/dev/null <<YAML
 grafana.ini:
   server:

@@ -15,6 +15,8 @@
 set -euo pipefail
 
 STACK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/placement.sh
+. "$STACK_DIR/addons/lib/placement.sh"
 CLUSTER="$(sed -n 's/^  name: *//p' "$STACK_DIR/cluster.yaml" | head -1)"
 KUBECONFIG_FILE="${KUBECONFIG_DIR:-$HOME/.kube/configs}/$CLUSTER.yaml"
 CHART_VERSION="${CHART_VERSION:-41.6.1}"
@@ -44,6 +46,7 @@ helm upgrade --install traefik traefik \
   --set service.type=ClusterIP \
   --set ingressClass.enabled=true \
   --set ingressClass.isDefaultClass=true \
+  --set-json "tolerations=$ALL_NODES_TOLERATIONS" \
   --wait --timeout 10m >/dev/null
 
 kubectl -n "$NAMESPACE" get pods -o wide

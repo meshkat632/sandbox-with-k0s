@@ -16,6 +16,23 @@ patches:
         name: local-path-storage
         labels:
           pod-security.kubernetes.io/enforce: privileged
+  # Every node is tainted: the provisioner runs on a control plane node. The
+  # helper pods are bound to their node directly and need no toleration.
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: local-path-provisioner
+        namespace: local-path-storage
+      spec:
+        template:
+          spec:
+            nodeSelector:
+              node-role.kubernetes.io/control-plane: ""
+            tolerations:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+                effect: NoSchedule
   - patch: |-
       apiVersion: storage.k8s.io/v1
       kind: StorageClass

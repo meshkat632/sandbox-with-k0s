@@ -11,6 +11,8 @@
 set -euo pipefail
 
 STACK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/placement.sh
+. "$STACK_DIR/addons/lib/placement.sh"
 CLUSTER="$(sed -n 's/^  name: *//p' "$STACK_DIR/cluster.yaml" | head -1)"
 KUBECONFIG_FILE="${KUBECONFIG_DIR:-$HOME/.kube/configs}/$CLUSTER.yaml"
 CHART_VERSION="${CHART_VERSION:-3.14.0}"
@@ -27,6 +29,8 @@ helm upgrade --install metrics-server metrics-server \
   --version "$CHART_VERSION" \
   --namespace kube-system \
   --set 'args={--kubelet-insecure-tls}' \
+  --set-json "nodeSelector=$CONTROL_PLANE_SELECTOR" \
+  --set-json "tolerations=$CONTROL_PLANE_TOLERATIONS" \
   --wait --timeout 10m
 
 # The metrics API answers a little after the pod is ready

@@ -10,6 +10,8 @@
 set -euo pipefail
 
 STACK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/placement.sh
+. "$STACK_DIR/addons/lib/placement.sh"
 CLUSTER="$(sed -n 's/^  name: *//p' "$STACK_DIR/cluster.yaml" | head -1)"
 KUBECONFIG_FILE="${KUBECONFIG_DIR:-$HOME/.kube/configs}/$CLUSTER.yaml"
 CHART_VERSION="${CHART_VERSION:-v1.21.2}"
@@ -27,6 +29,14 @@ helm upgrade --install cert-manager cert-manager \
   --version "$CHART_VERSION" \
   --namespace "$NAMESPACE" --create-namespace \
   --set crds.enabled=true \
+  --set-json "nodeSelector=$CONTROL_PLANE_SELECTOR" \
+  --set-json "tolerations=$CONTROL_PLANE_TOLERATIONS" \
+  --set-json "webhook.nodeSelector=$CONTROL_PLANE_SELECTOR" \
+  --set-json "webhook.tolerations=$CONTROL_PLANE_TOLERATIONS" \
+  --set-json "cainjector.nodeSelector=$CONTROL_PLANE_SELECTOR" \
+  --set-json "cainjector.tolerations=$CONTROL_PLANE_TOLERATIONS" \
+  --set-json "startupapicheck.nodeSelector=$CONTROL_PLANE_SELECTOR" \
+  --set-json "startupapicheck.tolerations=$CONTROL_PLANE_TOLERATIONS" \
   --wait --timeout 10m >/dev/null
 
 kubectl -n "$NAMESPACE" get pods
