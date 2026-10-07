@@ -46,6 +46,29 @@ resource "aws_instance" "talos" {
   tags = merge(var.tags, { Name = var.cluster_name })
 }
 
+# Separate disk for persistent volumes. Attached instead of declared on the
+# instance, so adding or resizing it does not replace the node.
+resource "aws_ebs_volume" "data" {
+  count = var.data_disk_size > 0 ? 1 : 0
+
+  availability_zone = aws_instance.talos.availability_zone
+  type              = "gp3"
+  size              = var.data_disk_size
+
+  tags = merge(var.tags, { Name = "${var.cluster_name}-data" })
+}
+
+resource "aws_volume_attachment" "data" {
+  count = var.data_disk_size > 0 ? 1 : 0
+
+  device_name = "/dev/sdf"
+  volume_id   = aws_ebs_volume.data[0].id
+  instance_id = aws_instance.talos.id
+
+  # Talos keeps the disk mounted, so a normal detach hangs on destroy
+  force_detach = true
+}
+
 # ---------------------------------------------------------------------------
 # 3. Talos: secrets -> config -> apply -> bootstrap -> kubeconfig
 # ---------------------------------------------------------------------------
@@ -76,7 +99,18 @@ data "talos_machine_configuration" "this" {
         }
       }
     }),
-  ], var.config_patches)
+    ],
+    # Talos formats the data disk and mounts it at /var/mnt/local-storage
+    var.data_disk_size > 0 ? [yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "UserVolumeConfig"
+      name       = "local-storage"
+      provisioning = {
+        diskSelector = { match = "!system_disk" }
+        minSize      = "1GiB"
+      }
+    })] : [],
+  var.config_patches)
 }
 
 data "talos_client_configuration" "this" {
