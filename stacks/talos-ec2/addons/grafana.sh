@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Install (or upgrade) Grafana (addons/grafana/values.yaml) with Prometheus
-# and Loki as datasources and the "Node Exporter Full" dashboard, and publish
-# it through a Traefik Ingress at https://grafana.<node-ip-with-dashes>.sslip.io
+# and Loki as datasources, and publish it through a Traefik Ingress at
+# https://grafana.<node-ip-with-dashes>.sslip.io
+#
+# Dashboards: "Node Exporter Full" (downloaded from grafana.com) and every
+# *.json file in addons/grafana/dashboards/, which use the datasource uid
+# "prometheus". Add a file there and run this again.
 #
 # The certificate comes from the ClusterIssuer in ISSUER (default
 # letsencrypt-prod, created by letsencrypt.sh). Use ISSUER=letsencrypt-staging
@@ -43,12 +47,20 @@ if [ -z "${HOST:-}" ]; then
   HOST="grafana.${ip//./-}.sslip.io"
 fi
 
+# One --set-file per dashboard file: dashboards.default.<name>.json
+dashboards=()
+for file in "$STACK_DIR"/addons/grafana/dashboards/*.json; do
+  [ -e "$file" ] || continue
+  dashboards+=(--set-file "dashboards.default.$(basename "$file" .json).json=$file")
+done
+
 echo "==> Installing grafana $CHART_VERSION on '$CLUSTER'"
 helm upgrade --install grafana grafana \
   --repo https://grafana-community.github.io/helm-charts \
   --version "$CHART_VERSION" \
   --namespace "$NAMESPACE" --create-namespace \
   -f "$STACK_DIR/addons/grafana/values.yaml" \
+  "${dashboards[@]}" \
   --wait --timeout 10m -f - >/dev/null <<YAML
 grafana.ini:
   server:
