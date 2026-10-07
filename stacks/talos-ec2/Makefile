@@ -20,10 +20,10 @@ KUBECONFIG_OUT := $(KUBECONFIG_DIR)/$(CLUSTER).yaml
 # Talos client config, published by the talos module
 TALOSCONFIG_PARAM ?= /talos/$(CLUSTER)/talosconfig
 
-.PHONY: help kubeconfig nodes
+.PHONY: help kubeconfig nodes metrics-server
 
 help: ## Show targets
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 kubeconfig: ## Fetch the admin kubeconfig from the instance (Talos API) into ~/.kube/configs/<cluster name>.yaml
 	@for bin in aws $(TALOSCTL); do
@@ -41,3 +41,6 @@ kubeconfig: ## Fetch the admin kubeconfig from the instance (Talos API) into ~/.
 
 nodes: kubeconfig ## kubectl get nodes with the fetched kubeconfig
 	@kubectl --kubeconfig "$(KUBECONFIG_OUT)" get nodes -o wide
+
+metrics-server: kubeconfig ## Install metrics-server (kubectl top, HPA)
+	@./addons/metrics-server.sh
