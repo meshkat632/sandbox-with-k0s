@@ -23,10 +23,10 @@ WAIT_SECONDS ?= 300
 # Talos client config, published by the talos module
 TALOSCONFIG_PARAM ?= /talos/$(CLUSTER)/talosconfig
 
-.PHONY: help kubeconfig nodes metrics-server traefik cert-manager wildcard-cert error-pages letsencrypt hello-world local-storage node-exporter prometheus loki grafana addons
+.PHONY: help kubeconfig nodes metrics-server traefik cert-manager wildcard-cert error-pages letsencrypt hello-world local-storage node-exporter kube-state-metrics prometheus loki grafana addons
 
 help: ## Show targets
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-19s\033[0m %s\n", $$1, $$2}'
 
 kubeconfig: ## Fetch the admin kubeconfig from the instance (Talos API) into ~/.kube/configs/<cluster name>.yaml
 	@for bin in aws $(TALOSCTL); do
@@ -84,6 +84,9 @@ local-storage: kubeconfig ## Install the default StorageClass on the fixed-size 
 node-exporter: kubeconfig ## Install the Prometheus node exporter (node metrics on port 9100)
 	@./addons/node-exporter.sh
 
+kube-state-metrics: kubeconfig ## Install kube-state-metrics (object state as Prometheus metrics)
+	@./addons/kube-state-metrics.sh
+
 prometheus: kubeconfig ## Install Prometheus (server only, data on the default StorageClass)
 	@./addons/prometheus.sh
 
@@ -95,7 +98,7 @@ grafana: kubeconfig ## Install Grafana (Prometheus + Loki datasources) with an I
 
 # In dependency order: Prometheus, Loki and Grafana need the StorageClass; the
 # certificates, pages and Grafana's Ingress need Traefik and cert-manager
-ADDONS := metrics-server node-exporter local-storage prometheus loki traefik cert-manager wildcard-cert error-pages letsencrypt hello-world grafana
+ADDONS := metrics-server node-exporter kube-state-metrics local-storage prometheus loki traefik cert-manager wildcard-cert error-pages letsencrypt hello-world grafana
 
 addons: kubeconfig ## Install all add-ons, in order
 	@for addon in $(ADDONS); do
