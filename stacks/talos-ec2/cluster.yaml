@@ -1,0 +1,30 @@
+# Single-node Talos cluster on EC2 (control plane also runs workloads).
+# CAPI-style: infrastructure ~ AWSCluster, controlPlane ~ TalosControlPlane.
+apiVersion: cluster.local/v1alpha1
+kind: Cluster
+metadata:
+  name: talos-dev
+spec:
+  infrastructure:
+    region: eu-central-1
+    additionalTags:
+      Project: talos-dev
+      ManagedBy: terraform
+    network:
+      httpIngress:
+        allowedCIDRBlocks: []     # 80/443 for an ingress controller; [] = closed
+
+  controlPlane:
+    version: v1.34.1              # Kubernetes
+    machineTemplate:
+      spec:
+        # Free tier + enough for Talos (min 2 vCPU / 2 GiB):
+        #   c7i-flex.large  2 vCPU / 4 GiB   <- recommended
+        #   m7i-flex.large  2 vCPU / 8 GiB
+        #   t3.small        2 vCPU / 2 GiB   (bare minimum)
+        #   t4g.small       2 vCPU / 2 GiB   (arm64, bare minimum)
+        instanceType: c7i-flex.large
+        rootVolume:
+          size: 20                # GiB, max 30 to stay in free tier
+    controlPlaneConfig:
+      talosVersion: v1.11.2
