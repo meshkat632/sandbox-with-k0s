@@ -169,6 +169,8 @@ module "workers" {
   tags          = local.tags
 }
 
+
+/*
 # ---------------------------------------------------------------------------
 # Add-ons: `make addons` for the ones listed in cluster.yaml, on the machine
 # that runs Terraform, which therefore needs aws, talosctl, kubectl, helm and git. The scripts are idempotent.
@@ -194,3 +196,4 @@ resource "terraform_data" "addons" {
   # The whole module: bootstrap, the published talosconfig and the data disk
   depends_on = [module.talos]
 }
+*/

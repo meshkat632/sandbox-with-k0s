@@ -53,7 +53,7 @@ spec:
   # versions of the control plane. Every worker is one more instance and disk,
   # beyond what the free tier covers for the control plane.
   workers:
-    replicas: 3
+    replicas: 0
     machineTemplate:
       spec:
         instanceType: c7i-flex.large   # same choices as the control plane

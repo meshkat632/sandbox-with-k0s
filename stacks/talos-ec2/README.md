@@ -33,7 +33,12 @@ CAPI-style `Cluster` object. `terraform apply` creates:
 - `workers.replicas` extra worker instances that join the cluster;
 - the add-ons listed under `addons.install`, by running `make addons`.
 
-State is local (`terraform.tfstate`, not committed).
+State is in Terraform Cloud: organization `sandbox-v1`, workspace `talos-ec2`
+(the `cloud` block in `versions.tf`). The workspace must use **Local**
+execution. Terraform has to run on your machine, because the security group
+opens the APIs to the IP Terraform runs from, and the add-ons need `make`,
+`aws`, `talosctl`, `kubectl` and `helm`. With remote execution the runner's IP
+is allowed instead of yours, and the add-ons fail with `make: not found`.
 
 | Path | Content |
 | ---- | ------- |

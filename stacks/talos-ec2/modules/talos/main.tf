@@ -205,14 +205,10 @@ resource "talos_machine_configuration_apply" "this" {
   endpoint                    = aws_instance.talos[count.index].public_ip
   node                        = aws_instance.talos[count.index].private_ip
 
-  # graceful = false: the last etcd member can't remove itself, so a graceful
-  # reset fails when the cluster is destroyed. The price: lowering
-  # control_plane_count does not take the removed nodes out of etcd first.
-  on_destroy = {
-    graceful = false
-    reset    = true
-    reboot   = true
-  }
+  # No reset on destroy: the instance is terminated anyway, and a reset needs
+  # the Talos API, so a destroy from another IP than the one in the security
+  # group would hang. The price: lowering control_plane_count does not take
+  # the removed nodes out of etcd first.
 }
 
 # Only the first node is bootstrapped; the others join its etcd on their own
