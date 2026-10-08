@@ -47,8 +47,8 @@ locals {
   addons       = local.addons_raw == null ? [] : try([for a in local.addons_raw : tostring(a)], [])
   known_addons = [for f in fileset("${path.module}/addons", "*.sh") : trimsuffix(f, ".sh")]
 
-  # Everything `make addons` runs or reads
-  addon_files = setunion(fileset(path.module, "addons/**"), ["Makefile"])
+  # Everything ./addons.sh runs or reads
+  addon_files = setunion(fileset(path.module, "addons/**"), ["addons.sh", "kubeconfig.sh"])
 
   # Optional, not in cluster.yaml by default: controlPlaneConfig.strategicPatches
   config_patches = [for p in coalesce(try(local.talos.strategicPatches, null), []) : yamlencode(p)]
@@ -170,10 +170,10 @@ module "workers" {
 }
 
 
-/*
 # ---------------------------------------------------------------------------
-# Add-ons: `make addons` for the ones listed in cluster.yaml, on the machine
-# that runs Terraform, which therefore needs aws, talosctl, kubectl, helm and git. The scripts are idempotent.
+# Add-ons: ./addons.sh for the ones listed in cluster.yaml, on the machine
+# that runs Terraform, which therefore needs bash, aws, talosctl, kubectl,
+# helm and git (not make). The scripts are idempotent.
 # Terraform only tracks whether they ran - not what is installed in the
 # cluster - and destroy does not uninstall them (the node goes away anyway).
 # ---------------------------------------------------------------------------
@@ -189,11 +189,10 @@ resource "terraform_data" "addons" {
   }
 
   provisioner "local-exec" {
-    command     = "make addons ADDONS='${join(" ", local.addons)}'"
+    command     = "./addons.sh ${join(" ", local.addons)}"
     working_dir = path.module
   }
 
   # The whole module: bootstrap, the published talosconfig and the data disk
   depends_on = [module.talos]
 }
-*/

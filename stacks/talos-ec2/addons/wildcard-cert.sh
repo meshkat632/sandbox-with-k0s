@@ -13,8 +13,8 @@
 # Usage:
 #   ./addons/wildcard-cert.sh
 #
-# Needs cert-manager and Traefik (make cert-manager traefik).
-# Uses ~/.kube/configs/<cluster name>.yaml (run `make kubeconfig` first).
+# Needs cert-manager and Traefik (./addons.sh cert-manager traefik).
+# Uses ~/.kube/configs/<cluster name>.yaml (run `./kubeconfig.sh` first).
 # Defaults can also be set via env: KUBECONFIG_DIR, DOMAIN.
 #
 # The node's public IP changes when the instance is replaced: run this again.
@@ -27,11 +27,11 @@ KUBECONFIG_FILE="$KUBECONFIG_DIR/$CLUSTER.yaml"
 CA_FILE="$KUBECONFIG_DIR/$CLUSTER-ca.crt"
 
 command -v kubectl >/dev/null 2>&1 || { echo "ERROR: 'kubectl' not found in PATH" >&2; exit 1; }
-[ -s "$KUBECONFIG_FILE" ] || { echo "ERROR: $KUBECONFIG_FILE not found, run 'make kubeconfig' first" >&2; exit 1; }
+[ -s "$KUBECONFIG_FILE" ] || { echo "ERROR: $KUBECONFIG_FILE not found, run './kubeconfig.sh' first" >&2; exit 1; }
 export KUBECONFIG="$KUBECONFIG_FILE"
 
 for crd in certificates.cert-manager.io tlsstores.traefik.io; do
-  kubectl get crd "$crd" >/dev/null 2>&1 || { echo "ERROR: $crd is missing, run 'make cert-manager traefik' first" >&2; exit 1; }
+  kubectl get crd "$crd" >/dev/null 2>&1 || { echo "ERROR: $crd is missing, run './addons.sh cert-manager traefik' first" >&2; exit 1; }
 done
 
 if [ -z "${DOMAIN:-}" ]; then

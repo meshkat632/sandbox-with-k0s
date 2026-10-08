@@ -15,8 +15,8 @@
 # Usage:
 #   ./addons/letsencrypt.sh
 #
-# Needs cert-manager and Traefik (make cert-manager traefik).
-# Uses ~/.kube/configs/<cluster name>.yaml (run `make kubeconfig` first).
+# Needs cert-manager and Traefik (./addons.sh cert-manager traefik).
+# Uses ~/.kube/configs/<cluster name>.yaml (run `./kubeconfig.sh` first).
 # Defaults can also be set via env: KUBECONFIG_DIR, LETSENCRYPT_EMAIL
 # (account email for expiry notices, default: git config user.email).
 set -euo pipefail
@@ -32,12 +32,12 @@ EMAIL="${LETSENCRYPT_EMAIL:-$(git -C "$STACK_DIR" config user.email || true)}"
 for bin in helm kubectl; do
   command -v "$bin" >/dev/null 2>&1 || { echo "ERROR: '$bin' not found in PATH" >&2; exit 1; }
 done
-[ -s "$KUBECONFIG_FILE" ] || { echo "ERROR: $KUBECONFIG_FILE not found, run 'make kubeconfig' first" >&2; exit 1; }
+[ -s "$KUBECONFIG_FILE" ] || { echo "ERROR: $KUBECONFIG_FILE not found, run './kubeconfig.sh' first" >&2; exit 1; }
 [ -n "$EMAIL" ] || { echo "ERROR: set LETSENCRYPT_EMAIL (no git user.email found)" >&2; exit 1; }
 export KUBECONFIG="$KUBECONFIG_FILE"
 
-kubectl get crd clusterissuers.cert-manager.io >/dev/null 2>&1 || { echo "ERROR: cert-manager is missing, run 'make cert-manager' first" >&2; exit 1; }
-kubectl get ingressclass traefik >/dev/null 2>&1 || { echo "ERROR: Traefik is missing, run 'make traefik' first" >&2; exit 1; }
+kubectl get crd clusterissuers.cert-manager.io >/dev/null 2>&1 || { echo "ERROR: cert-manager is missing, run './addons.sh cert-manager' first" >&2; exit 1; }
+kubectl get ingressclass traefik >/dev/null 2>&1 || { echo "ERROR: Traefik is missing, run './addons.sh traefik' first" >&2; exit 1; }
 
 echo "==> Let's Encrypt issuers on '$CLUSTER' (account $EMAIL)"
 helm upgrade --install letsencrypt-issuers "$CHART_DIR" \

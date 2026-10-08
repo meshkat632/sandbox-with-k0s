@@ -14,8 +14,8 @@
 # Usage:
 #   ./addons/error-pages.sh
 #
-# Needs Traefik (make traefik).
-# Uses ~/.kube/configs/<cluster name>.yaml (run `make kubeconfig` first).
+# Needs Traefik (./addons.sh traefik).
+# Uses ~/.kube/configs/<cluster name>.yaml (run `./kubeconfig.sh` first).
 # Defaults can also be set via env: KUBECONFIG_DIR, IMAGE.
 set -euo pipefail
 
@@ -29,10 +29,10 @@ IMAGE="${IMAGE:-nginxinc/nginx-unprivileged:1.28-alpine}"
 NAMESPACE=traefik
 
 command -v kubectl >/dev/null 2>&1 || { echo "ERROR: 'kubectl' not found in PATH" >&2; exit 1; }
-[ -s "$KUBECONFIG_FILE" ] || { echo "ERROR: $KUBECONFIG_FILE not found, run 'make kubeconfig' first" >&2; exit 1; }
+[ -s "$KUBECONFIG_FILE" ] || { echo "ERROR: $KUBECONFIG_FILE not found, run './kubeconfig.sh' first" >&2; exit 1; }
 export KUBECONFIG="$KUBECONFIG_FILE"
 
-kubectl get crd ingressroutes.traefik.io >/dev/null 2>&1 || { echo "ERROR: Traefik is missing, run 'make traefik' first" >&2; exit 1; }
+kubectl get crd ingressroutes.traefik.io >/dev/null 2>&1 || { echo "ERROR: Traefik is missing, run './addons.sh traefik' first" >&2; exit 1; }
 
 echo "==> Deploying the default error pages on '$CLUSTER'"
 kubectl -n "$NAMESPACE" create configmap error-pages --from-file="$PAGES_DIR" --dry-run=client -o yaml | kubectl apply -f -

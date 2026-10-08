@@ -11,7 +11,7 @@
 #   ./addons/hello-world.sh
 #
 # Needs Traefik, and cert-manager + letsencrypt.sh unless ISSUER is empty.
-# Uses ~/.kube/configs/<cluster name>.yaml (run `make kubeconfig` first).
+# Uses ~/.kube/configs/<cluster name>.yaml (run `./kubeconfig.sh` first).
 # Defaults can also be set via env: KUBECONFIG_DIR, HOST, ISSUER.
 set -euo pipefail
 
@@ -27,12 +27,12 @@ NAMESPACE=hello-world
 for bin in helm kubectl; do
   command -v "$bin" >/dev/null 2>&1 || { echo "ERROR: '$bin' not found in PATH" >&2; exit 1; }
 done
-[ -s "$KUBECONFIG_FILE" ] || { echo "ERROR: $KUBECONFIG_FILE not found, run 'make kubeconfig' first" >&2; exit 1; }
+[ -s "$KUBECONFIG_FILE" ] || { echo "ERROR: $KUBECONFIG_FILE not found, run './kubeconfig.sh' first" >&2; exit 1; }
 export KUBECONFIG="$KUBECONFIG_FILE"
 
-kubectl get ingressclass traefik >/dev/null 2>&1 || { echo "ERROR: Traefik is missing, run 'make traefik' first" >&2; exit 1; }
+kubectl get ingressclass traefik >/dev/null 2>&1 || { echo "ERROR: Traefik is missing, run './addons.sh traefik' first" >&2; exit 1; }
 if [ -n "$ISSUER" ]; then
-  kubectl get clusterissuer "$ISSUER" >/dev/null 2>&1 || { echo "ERROR: ClusterIssuer '$ISSUER' is missing, run 'make cert-manager letsencrypt' first" >&2; exit 1; }
+  kubectl get clusterissuer "$ISSUER" >/dev/null 2>&1 || { echo "ERROR: ClusterIssuer '$ISSUER' is missing, run './addons.sh cert-manager letsencrypt' first" >&2; exit 1; }
 fi
 
 if [ -z "${HOST:-}" ]; then

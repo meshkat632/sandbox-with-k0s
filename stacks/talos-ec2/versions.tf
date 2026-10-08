@@ -1,12 +1,14 @@
 terraform {
 
 
+  /*
   cloud {
     organization = "sandbox-v1"
     workspaces {
       name = "talos-ec2"
     }
   }
+  */
 
   required_providers {
     aws = {

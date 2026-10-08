@@ -7,7 +7,7 @@
 # Usage:
 #   ./addons/traefik.sh
 #
-# Uses ~/.kube/configs/<cluster name>.yaml (run `make kubeconfig` first).
+# Uses ~/.kube/configs/<cluster name>.yaml (run `./kubeconfig.sh` first).
 # Defaults can also be set via env: KUBECONFIG_DIR, CHART_VERSION.
 #
 # Who can reach 80/443 is set in cluster.yaml
@@ -25,7 +25,7 @@ NAMESPACE=traefik
 for bin in helm kubectl; do
   command -v "$bin" >/dev/null 2>&1 || { echo "ERROR: '$bin' not found in PATH" >&2; exit 1; }
 done
-[ -s "$KUBECONFIG_FILE" ] || { echo "ERROR: $KUBECONFIG_FILE not found, run 'make kubeconfig' first" >&2; exit 1; }
+[ -s "$KUBECONFIG_FILE" ] || { echo "ERROR: $KUBECONFIG_FILE not found, run './kubeconfig.sh' first" >&2; exit 1; }
 export KUBECONFIG="$KUBECONFIG_FILE"
 
 echo "==> Namespace '$NAMESPACE' (privileged pod security, needed for host ports)"

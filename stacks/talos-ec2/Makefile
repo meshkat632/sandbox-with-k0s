@@ -1,119 +1,75 @@
-# Local helpers for the talos-ec2 stack.
-#
-# Nothing here runs Terraform or reads its state: the cluster name and region
-# come from cluster.yaml, credentials from AWS (SSM Parameter Store).
+# Shortcuts for the talos-ec2 stack. Optional: every target only calls
+# ./kubeconfig.sh or ./addons.sh, which work without make.
 
-SHELL := bash
-.ONESHELL:
-.SHELLFLAGS := -euo pipefail -c
 .DEFAULT_GOAL := help
 
-TALOSCTL ?= talosctl
-
-CLUSTER := $(shell sed -n 's/^  name: *//p' cluster.yaml | head -1)
-REGION  := $(shell sed -n 's/^ *region: *//p' cluster.yaml | head -1)
-
-# One cluster per file, picked up by kubectl from ~/.kube/configs/*.yaml
+CLUSTER        := $(shell sed -n 's/^  name: *//p' cluster.yaml | head -1)
 KUBECONFIG_DIR ?= $(HOME)/.kube/configs
-KUBECONFIG_OUT := $(KUBECONFIG_DIR)/$(CLUSTER).yaml
 
-# How long make kubeconfig waits for the API server after a fresh apply
-WAIT_SECONDS ?= 300
+# make addons ADDONS="traefik cert-manager" overrides the list in cluster.yaml
+ADDONS ?=
 
-# Talos client config, published by the talos module
-TALOSCONFIG_PARAM ?= /talos/$(CLUSTER)/talosconfig
-
-.PHONY: help kubeconfig nodes metrics-server traefik cert-manager wildcard-cert error-pages letsencrypt hello-world local-storage node-exporter kube-state-metrics prometheus loki grafana addons
+.PHONY: help kubeconfig nodes clean addons metrics-server node-exporter kube-state-metrics local-storage prometheus loki traefik cert-manager wildcard-cert error-pages letsencrypt hello-world grafana
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-19s\033[0m %s\n", $$1, $$2}'
 
-kubeconfig: ## Fetch the admin kubeconfig from the instance (Talos API) into ~/.kube/configs/<cluster name>.yaml
-	@for bin in aws $(TALOSCTL); do
-		command -v "$$bin" >/dev/null || { echo "ERROR: '$$bin' not found in PATH" >&2; exit 1; }
-	done
-	tmp="$$(mktemp -d)"
-	trap 'rm -rf "$$tmp"' EXIT
-	aws ssm get-parameter --region "$(REGION)" --name "$(TALOSCONFIG_PARAM)" --with-decryption \
-		--query Parameter.Value --output text > "$$tmp/talosconfig"
-	# Talos has no SSH: the node hands out a fresh kubeconfig over its API (port 50000)
-	$(TALOSCTL) --talosconfig "$$tmp/talosconfig" kubeconfig "$$tmp/kubeconfig" --merge=false
-	mkdir -p "$(KUBECONFIG_DIR)"
-	install -m 600 "$$tmp/kubeconfig" "$(KUBECONFIG_OUT)"
-	echo "Wrote $(KUBECONFIG_OUT)"
-	# Right after an apply the node is still starting the control plane
-	echo "Waiting for the API server (up to $(WAIT_SECONDS)s)"
-	deadline=$$(( $$(date +%s) + $(WAIT_SECONDS) ))
-	until kubectl --kubeconfig "$(KUBECONFIG_OUT)" --request-timeout=5s get --raw /readyz >/dev/null 2>&1; do
-		if [ "$$(date +%s)" -ge "$$deadline" ]; then
-			echo "ERROR: API server not ready after $(WAIT_SECONDS)s" >&2
-			kubectl --kubeconfig "$(KUBECONFIG_OUT)" --request-timeout=5s get --raw /readyz >&2 || true
-			exit 1
-		fi
-		sleep 5
-	done
-	echo "API server is ready"
+kubeconfig: ## Fetch the admin kubeconfig from the cluster (Talos API) into ~/.kube/configs/<cluster name>.yaml
+	@./kubeconfig.sh
 
 nodes: kubeconfig ## kubectl get nodes with the fetched kubeconfig
-	@kubectl --kubeconfig "$(KUBECONFIG_OUT)" get nodes -o wide
+	@kubectl --kubeconfig "$(KUBECONFIG_DIR)/$(CLUSTER).yaml" get nodes -o wide
 
-metrics-server: kubeconfig ## Install metrics-server (kubectl top, HPA)
-	@./addons/metrics-server.sh
-
-traefik: kubeconfig ## Install Traefik on ports 80/443 of the node (default ingress class)
-	@./addons/traefik.sh
-
-cert-manager: kubeconfig ## Install cert-manager (controller and CRDs, no issuers)
-	@./addons/cert-manager.sh
-
-wildcard-cert: kubeconfig ## Issue a wildcard certificate (local CA) and make it Traefik's default
-	@./addons/wildcard-cert.sh
-
-error-pages: kubeconfig ## Deploy the default error pages (catch-all 404, opt-in 5xx middleware)
-	@./addons/error-pages.sh
-
-letsencrypt: kubeconfig ## Create the Let's Encrypt issuers (HTTP-01 through Traefik, needs port 80 open)
-	@./addons/letsencrypt.sh
-
-hello-world: kubeconfig ## Deploy a hello-world page with an Ingress and a Let's Encrypt certificate
-	@./addons/hello-world.sh
-
-local-storage: kubeconfig ## Install the default StorageClass on the fixed-size data disk
-	@./addons/local-storage.sh
-
-node-exporter: kubeconfig ## Install the Prometheus node exporter (node metrics on port 9100)
-	@./addons/node-exporter.sh
-
-kube-state-metrics: kubeconfig ## Install kube-state-metrics (object state as Prometheus metrics)
-	@./addons/kube-state-metrics.sh
-
-prometheus: kubeconfig ## Install Prometheus (server only, data on the default StorageClass)
-	@./addons/prometheus.sh
-
-loki: kubeconfig ## Install Loki and the Alloy log collector (pod logs, 7 days)
-	@./addons/loki.sh
-
-grafana: kubeconfig ## Install Grafana (Prometheus + Loki datasources) with an Ingress and a Let's Encrypt certificate
-	@./addons/grafana.sh
-
-# In dependency order: Prometheus, Loki and Grafana need the StorageClass; the
-# certificates, pages and Grafana's Ingress need Traefik and cert-manager
-ALL_ADDONS := metrics-server node-exporter kube-state-metrics local-storage prometheus loki traefik cert-manager wildcard-cert error-pages letsencrypt hello-world grafana
-
-# The selection: spec.addons.install in cluster.yaml (one "- name" per line),
-# or make addons ADDONS="traefik cert-manager"
-ADDONS ?= $(shell sed -n '/^ *install:/,/^ *[a-zA-Z]/s/^ *- *\([a-z-]*\).*/\1/p' cluster.yaml)
-
-addons: kubeconfig ## Install the add-ons selected in cluster.yaml, in dependency order
-	@unknown="$(filter-out $(ALL_ADDONS),$(ADDONS))"
-	if [ -n "$$unknown" ]; then
-		echo "ERROR: unknown add-on: $$unknown (known: $(ALL_ADDONS))" >&2
-		exit 1
+# The state lives in Terraform Cloud; these are leftovers from local runs.
+# A local state that still tracks resources is kept unless FORCE=1.
+clean: ## Remove local Terraform state files (terraform.tfstate*), not the state in Terraform Cloud
+	@if [ -f terraform.tfstate ] && grep -q '"type":' terraform.tfstate && [ "$(FORCE)" != "1" ]; then \
+		echo "ERROR: terraform.tfstate still tracks resources; deleting it would orphan them." >&2; \
+		echo "       Destroy or migrate them first, or run: make clean FORCE=1" >&2; \
+		exit 1; \
 	fi
-	selected="$(filter $(ADDONS),$(ALL_ADDONS))"
-	[ -n "$$selected" ] || echo "No add-ons selected in cluster.yaml"
-	for addon in $$selected; do
-		echo
-		echo "### $$addon"
-		./addons/$$addon.sh
-	done
+	@files="$$(ls terraform.tfstate terraform.tfstate.* 2>/dev/null || true)"; \
+	if [ -z "$$files" ]; then echo "No local state files"; exit 0; fi; \
+	rm -f $$files && echo "Removed:" && echo "$$files" | sed 's/^/  /'
+
+addons: ## Install the add-ons selected in cluster.yaml, in dependency order
+	@./addons.sh $(ADDONS)
+
+metrics-server: ## Install metrics-server (kubectl top, HPA)
+	@./addons.sh $@
+
+node-exporter: ## Install the Prometheus node exporter (node metrics on port 9100)
+	@./addons.sh $@
+
+kube-state-metrics: ## Install kube-state-metrics (object state as Prometheus metrics)
+	@./addons.sh $@
+
+local-storage: ## Install the default StorageClass on the fixed-size data disk
+	@./addons.sh $@
+
+prometheus: ## Install Prometheus (server only, data on the default StorageClass)
+	@./addons.sh $@
+
+loki: ## Install Loki and the Alloy log collector (pod logs, 7 days)
+	@./addons.sh $@
+
+traefik: ## Install Traefik on ports 80/443 of every node (default ingress class)
+	@./addons.sh $@
+
+cert-manager: ## Install cert-manager (controller and CRDs, no issuers)
+	@./addons.sh $@
+
+wildcard-cert: ## Issue a wildcard certificate (local CA) and make it Traefik's default
+	@./addons.sh $@
+
+error-pages: ## Deploy the default error pages (catch-all 404, opt-in 5xx middleware)
+	@./addons.sh $@
+
+letsencrypt: ## Create the Let's Encrypt issuers (HTTP-01 through Traefik, needs port 80 open)
+	@./addons.sh $@
+
+hello-world: ## Deploy a hello-world page with an Ingress and a Let's Encrypt certificate
+	@./addons.sh $@
+
+grafana: ## Install Grafana (Prometheus + Loki datasources) with an Ingress and a Let's Encrypt certificate
+	@./addons.sh $@

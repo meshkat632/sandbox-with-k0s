@@ -31,14 +31,15 @@ CAPI-style `Cluster` object. `terraform apply` creates:
 - the Talos machine config, the bootstrap, and the Talos client config
   published to SSM Parameter Store (`/talos/<cluster name>/talosconfig`);
 - `workers.replicas` extra worker instances that join the cluster;
-- the add-ons listed under `addons.install`, by running `make addons`.
+- the add-ons listed under `addons.install`, by running `./addons.sh`.
 
 State is in Terraform Cloud: organization `sandbox-v1`, workspace `talos-ec2`
 (the `cloud` block in `versions.tf`). The workspace must use **Local**
 execution. Terraform has to run on your machine, because the security group
-opens the APIs to the IP Terraform runs from, and the add-ons need `make`,
-`aws`, `talosctl`, `kubectl` and `helm`. With remote execution the runner's IP
-is allowed instead of yours, and the add-ons fail with `make: not found`.
+opens the APIs to the IP Terraform runs from, and the add-ons need `aws`,
+`talosctl`, `kubectl` and `helm`. With remote execution the runner's IP is
+allowed instead of yours, and the add-ons fail because the runner does not
+have those tools.
 
 | Path | Content |
 | ---- | ------- |
@@ -46,25 +47,28 @@ is allowed instead of yours, and the add-ons fail with `make: not found`.
 | `modules/networking` | Security groups, and the optional load balancer with its Elastic IP |
 | `modules/talos` | Control plane instances, data disks, Talos config and bootstrap |
 | `modules/workers` | Worker instances and their Talos config |
+| `kubeconfig.sh` | Fetches the kubeconfig and waits for the API server |
+| `addons.sh` | Installs one, several or the selected add-ons |
 | `addons/` | One install script per add-on, plus their config files |
-| `Makefile` | `kubeconfig`, `nodes`, one target per add-on, `addons` |
+| `Makefile` | Optional shortcuts for the two scripts |
 
 ## Requirements
 
 On the machine that runs Terraform:
-`terraform`, `aws` (with credentials for the account), `talosctl`, `kubectl`,
-`helm`, `git` and `make`.
+`terraform`, `bash`, `aws` (with credentials for the account), `talosctl`,
+`kubectl`, `helm` and `git`. `make` is optional: the Makefile only wraps
+`./kubeconfig.sh` and `./addons.sh`.
 
 ## Usage
 
 ```bash
 terraform init
 terraform apply        # cluster + add-ons
-make nodes             # fetch the kubeconfig, kubectl get nodes
+./kubeconfig.sh        # write ~/.kube/configs/<cluster name>.yaml
 terraform destroy
 ```
 
-`make help` lists all targets.
+`make help` lists the optional shortcuts (`make nodes`, `make traefik`, ...).
 
 | Output | Meaning |
 | ------ | ------- |
@@ -74,12 +78,13 @@ terraform destroy
 | `worker_public_ips` / `worker_private_ips` | The same for the workers |
 | `allowed_cidr` | Your IP, the only one allowed on the Talos and Kubernetes APIs |
 | `talosconfig_parameter` | SSM parameter with the Talos client config |
-| `kubeconfig`, `talosconfig` | Sensitive; `make kubeconfig` is the usual way to get a kubeconfig |
+| `kubeconfig`, `talosconfig` | Sensitive; `./kubeconfig.sh` is the usual way to get a kubeconfig |
 
 ### kubeconfig
 
-`make kubeconfig` writes `~/.kube/configs/<cluster name>.yaml` (override the
-folder with `KUBECONFIG_DIR`). It does not use Terraform: it reads the Talos
+`./kubeconfig.sh` (or `make kubeconfig`) writes
+`~/.kube/configs/<cluster name>.yaml` (override the folder with
+`KUBECONFIG_DIR`). It does not use Terraform: it reads the Talos
 client config from SSM, asks the first control plane node for a fresh admin
 kubeconfig over the Talos API, and waits until the API server is ready
 (`WAIT_SECONDS`, default 300).
@@ -219,7 +224,7 @@ Set `spec.workers.replicas` in `cluster.yaml` and run `terraform apply`. Each
 worker ([`modules/workers`](modules/workers)) is an instance from the Talos AMI
 that gets a worker config and joins through the load balancer, or through the
 control plane's private IP without one;
-`make nodes` shows it after about a minute. Workers run the same Talos and
+`kubectl get nodes` shows it after about a minute. Workers run the same Talos and
 Kubernetes versions as the control plane and may use another instance type or
 architecture. They are tainted like every node: only pods that select and
 tolerate `cluster.local/role=worker` run there (see [Scheduling](#scheduling)).
@@ -241,18 +246,28 @@ tolerate `cluster.local/role=worker` run there (see [Scheduling](#scheduling)).
 
 ## Add-ons
 
-One script per add-on in [`addons/`](addons). Each is idempotent and can be
-run on its own (`make traefik`, or `./addons/traefik.sh`). `make addons` and
-`terraform apply` install the ones listed in `cluster.yaml`, always in the
-order below. `make addons ADDONS="traefik cert-manager"` overrides the list
-for one run.
+One script per add-on in [`addons/`](addons), run through
+[`addons.sh`](addons.sh):
+
+```bash
+./addons.sh                       # the add-ons listed in cluster.yaml
+./addons.sh traefik               # one add-on
+./addons.sh traefik cert-manager  # several
+./addons.sh --all                 # every add-on
+./addons.sh --list                # show the add-ons and the selection
+```
+
+It fetches the kubeconfig first and always installs in the order below,
+whatever the order of the arguments. The add-ons are idempotent, and the first
+failure stops the run. `terraform apply` runs `./addons.sh` with the list from
+`cluster.yaml`. `make traefik` and `make addons` are shortcuts for the same.
 
 The committed `cluster.yaml` lists the five core ones: `metrics-server`,
 `local-storage`, `traefik`, `cert-manager` and `letsencrypt`. The rest is
 commented out there; the monitoring stack is the heavy part.
 
-Terraform runs them again when the list, a file under `addons/`, the
-`Makefile` or the cluster's address changes. It only tracks that the scripts
+Terraform runs them again when the list, a file under `addons/`, one of the
+two scripts or the cluster's address changes. It only tracks that the scripts
 ran, not what is installed: removing an entry does not uninstall the add-on
 (`helm uninstall` does).
 
@@ -312,7 +327,7 @@ destroyed with the stack.
 ### Error pages
 
 Edit the files in [`addons/error-pages/`](addons/error-pages) and run
-`make error-pages`. To show `5xx.html` instead of an app's own 5xx response,
+`./addons.sh error-pages`. To show `5xx.html` instead of an app's own 5xx response,
 annotate its Ingress:
 
 ```yaml

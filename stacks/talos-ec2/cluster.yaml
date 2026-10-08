@@ -61,7 +61,7 @@ spec:
           size: 20                     # GiB
 
   # Cluster add-ons: one entry per script in addons/. terraform apply (and
-  # `make addons`) installs the listed ones, always in dependency order, once
+  # `./addons.sh`) installs the listed ones, always in dependency order, once
   # the cluster is up - and again when the list, an add-on file or the node's
   # public IP changes. Comment an entry out to skip it; [] installs nothing.
   # Removing an entry does not uninstall the add-on.
