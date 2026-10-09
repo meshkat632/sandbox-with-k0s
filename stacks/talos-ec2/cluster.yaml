@@ -67,16 +67,16 @@ spec:
   # Removing an entry does not uninstall the add-on.
   addons:
     install:
-      #- metrics-server      # kubectl top, HPA
+      - metrics-server      # kubectl top, HPA
       #- node-exporter       # node metrics
-      #- kube-state-metrics  # object state metrics
-      #- local-storage       # default StorageClass on the data disk
+      - kube-state-metrics  # object state metrics
+      - local-storage       # default StorageClass on the data disk
       #- prometheus          # needs local-storage
       #- loki                # needs local-storage; includes the Alloy log collector
-      #- traefik             # ingress controller on 80/443
-      #- cert-manager
+      - traefik             # ingress controller on 80/443
+      - cert-manager
       #- wildcard-cert       # needs traefik, cert-manager
       #- error-pages         # needs traefik
-      #- letsencrypt         # needs traefik, cert-manager
+      - letsencrypt         # needs traefik, cert-manager
       #- hello-world         # needs traefik, letsencrypt
       #- grafana             # needs local-storage, traefik, letsencrypt

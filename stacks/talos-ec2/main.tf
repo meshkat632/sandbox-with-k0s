@@ -170,6 +170,7 @@ module "workers" {
 }
 
 
+/*
 # ---------------------------------------------------------------------------
 # Add-ons: ./addons.sh for the ones listed in cluster.yaml, on the machine
 # that runs Terraform, which therefore needs bash, aws, talosctl, kubectl,
@@ -196,3 +197,4 @@ resource "terraform_data" "addons" {
   # The whole module: bootstrap, the published talosconfig and the data disk
   depends_on = [module.talos]
 }
+*/
