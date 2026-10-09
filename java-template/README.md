@@ -35,9 +35,12 @@ Plain Maven equivalents: `mvn test`, `mvn clean package` (runnable jar in `targe
 ## Adopting the template
 
 ```bash
-../scripts/new-java-project.sh io.acme billing              # new project in ../billing
-../scripts/new-java-project.sh io.acme billing ~/code/bill  # ...or in a directory of your choice
+mkjava io.acme billing              # new project in ./billing
+mkjava io.acme billing ~/code/bill  # ...or in a directory of your choice
 ```
+
+`mkjava` is `scripts/new-java-project.sh`, installed once with
+`ln -s "$(realpath ../scripts/new-java-project.sh)" ~/.local/bin/mkjava`.
 
 The script copies the template, sets `groupId`/`artifactId`/`mainClass` in `pom.xml` and `JAR`
 in the `Makefile`, and moves the `com.example` packages to the groupId. Then replace `Greeter`

@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
 # Create a new Java project from the java-template with its own groupId/artifactId.
 #
-#   scripts/new-java-project.sh <groupId> <artifactId> [target-dir]
+#   mkjava <groupId> <artifactId> [target-dir]
 #
-#   scripts/new-java-project.sh io.acme billing              # -> <repo>/billing
-#   scripts/new-java-project.sh io.acme billing ~/code/bill  # -> ~/code/bill
+#   mkjava io.acme billing              # -> ./billing
+#   mkjava io.acme billing ~/code/bill  # -> ~/code/bill
 #
 # The groupId also becomes the Java package (com.example -> io.acme).
+#
+# Install as a command:  ln -s "$(realpath scripts/new-java-project.sh)" ~/.local/bin/mkjava
 set -euo pipefail
 
-TEMPLATE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../java-template" && pwd)"
+# resolve symlinks so the template is found when installed on PATH
+SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+TEMPLATE_DIR="$(cd "$SCRIPT_DIR/../java-template" && pwd)"
 TEMPLATE_GROUP="com.example"
 TEMPLATE_ARTIFACT="java-template"
 
 die() { echo "error: $*" >&2; exit 1; }
 
 usage() {
-    sed -n '2,8p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -25,7 +29,7 @@ case "${1:-}" in -h|--help) usage ;; esac
 
 GROUP_ID="$1"
 ARTIFACT_ID="$2"
-TARGET_DIR="${3:-$TEMPLATE_DIR/../$ARTIFACT_ID}"
+TARGET_DIR="${3:-$PWD/$ARTIFACT_ID}"
 
 # groupId doubles as the package name, so it has to be a valid Java package
 [[ "$GROUP_ID" =~ ^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*$ ]] \
