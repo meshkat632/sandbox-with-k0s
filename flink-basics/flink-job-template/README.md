@@ -35,10 +35,17 @@ Plain Maven equivalents: `mvn test`, `mvn clean package` (fat jar in `target/`),
 
 ## Adopting the template
 
-1. Rename `groupId`/`artifactId`/`mainClass` property in `pom.xml`.
-2. Move `com.example` packages to your own (two main classes + two tests).
-3. Replace `WordCountJob` with your job; keep `Tokenizer` only if useful.
-4. Flink version bumps: change `<flink.version>` in one place.
+```bash
+mkflink io.acme click-counter              # new job in ./click-counter
+mkflink io.acme click-counter ~/code/cc    # ...or in a directory of your choice
+```
+
+`mkflink` is `scripts/new-flink-job.sh`, installed once with
+`ln -s "$(realpath ../../scripts/new-flink-job.sh)" ~/.local/bin/mkflink`.
+
+The script copies the template, sets `groupId`/`artifactId`/`mainClass` in `pom.xml` and the
+`Makefile`, and moves the `com.example` packages to the groupId. Then replace `WordCountJob`
+with your job; keep `Tokenizer` only if useful.
 
 ## Notes
 
@@ -46,3 +53,4 @@ Plain Maven equivalents: `mvn test`, `mvn clean package` (fat jar in `target/`),
   via "Add dependencies with 'provided' scope to classpath" (Run Configuration ->
   Modify options) or via the test classpath.
 - `mvn verify` enforces google-java-format via Spotless; run `make format` to fix.
+- Flink version bumps: change `<flink.version>` in `pom.xml`, one place.

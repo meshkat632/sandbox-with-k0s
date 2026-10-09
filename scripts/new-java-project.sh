@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create a new Java project from the java-template with its own groupId/artifactId.
+# Create a new Java project from a template with its own groupId/artifactId.
 #
 #   mkjava <groupId> <artifactId> [target-dir]
 #
@@ -8,19 +8,23 @@
 #
 # The groupId also becomes the Java package (com.example -> io.acme).
 #
+# The template defaults to java-template; set TEMPLATE_DIR to use another one
+# (see new-flink-job.sh).
+#
 # Install as a command:  ln -s "$(realpath scripts/new-java-project.sh)" ~/.local/bin/mkjava
 set -euo pipefail
 
 # resolve symlinks so the template is found when installed on PATH
 SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
-TEMPLATE_DIR="$(cd "$SCRIPT_DIR/../java-template" && pwd)"
+TEMPLATE_DIR="$(cd "${TEMPLATE_DIR:-$SCRIPT_DIR/../java-template}" && pwd)"
 TEMPLATE_GROUP="com.example"
-TEMPLATE_ARTIFACT="java-template"
+TEMPLATE_ARTIFACT="$(basename "$TEMPLATE_DIR")"
+CMD_NAME="${CMD_NAME:-mkjava}"
 
 die() { echo "error: $*" >&2; exit 1; }
 
 usage() {
-    sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,9p' "${BASH_SOURCE[0]}" | sed -e 's/^# \{0,1\}//' -e "s/mkjava/$CMD_NAME/"
     exit "${1:-0}"
 }
 
